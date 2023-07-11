@@ -1,0 +1,6 @@
+,error_code,description
+0,-100,not enough data to compute retention – too recent
+1,-200,no students this year
+2,-300,major vanished from the reports
+3,-400,zero graduates and zero freshmen
+4,-500,computed programme duration is zero
