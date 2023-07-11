@@ -5,8 +5,9 @@ import os
 from tqdm import tqdm
 pd.options.mode.chained_assignment = None
 
-MAIN_PATH = '/Users/leonidharlov/Documents/Industrial Potential/data/FINAL/'
-DATA_PATH = f'{MAIN_PATH}data/'
+MAIN_PATH = ''
+OUTPUT_DATA_PATH = f'{MAIN_PATH}output_data/'
+INPUT_DATA_PATH = f'{MAIN_PATH}input_data/'
 
 # returns a list of files in a given folder
 def list_files(folder, show_hidden=False):
@@ -18,7 +19,7 @@ def list_files(folder, show_hidden=False):
 # returns a dictionary, keys are the regions available in the reports, values are the table filenames
 def get_region_filenames(year, edu_type, fulltime_only=True):
     folder_name = 'middle' if edu_type == 'СПО' else 'higher'
-    reports_path = f'{DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
+    reports_path = f'{INPUT_DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
     path_state = reports_path+'Государственные/'
     path_private = reports_path+'Негосударственные/'
 
@@ -45,7 +46,7 @@ def get_start_index(df):
 # for a given region in a given year
 def get_admitted_table(region,year,edu_type,save_file=True):
     folder_name = 'middle' if edu_type == 'СПО' else 'higher'
-    reports_path = f'{DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
+    reports_path = f'{INPUT_DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
     region_filenames = get_region_filenames(year,edu_type)
     
     df_list = []
@@ -103,7 +104,7 @@ def get_admitted_table(region,year,edu_type,save_file=True):
             ['major','code']).agg({'applied':'sum','entered':'sum'}
                                   ).sort_values('code').reset_index()
         if save_file:
-            admitted_table.to_csv(f'{DATA_PATH}admitted_table_{region}_{edu_type}_{year}.csv')
+            admitted_table.to_csv(f'{OUTPUT_DATA_PATH}admitted_table_{region}_{edu_type}_{year}.csv')
 
         return admitted_table
     
@@ -113,7 +114,7 @@ def get_admitted_table(region,year,edu_type,save_file=True):
 # for a given region in a given year
 def get_graduates_table(region,year,edu_type,save_file=True):
     folder_name = 'middle' if edu_type == 'СПО' else 'higher'
-    reports_path = f'{DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
+    reports_path = f'{INPUT_DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
     region_filenames = get_region_filenames(year,edu_type)
     
     df_list = []
@@ -156,7 +157,7 @@ def get_graduates_table(region,year,edu_type,save_file=True):
             ['major','code']).agg({'graduates':'sum'}).sort_values('code').reset_index()
         
         if save_file:
-            graduates_table.to_csv(f'{DATA_PATH}graduates_table_{region}_{edu_type}_{year}.csv')
+            graduates_table.to_csv(f'{OUTPUT_DATA_PATH}graduates_table_{region}_{edu_type}_{year}.csv')
 
         return graduates_table
     
@@ -166,7 +167,7 @@ def get_graduates_table(region,year,edu_type,save_file=True):
 # for a given region in a given year
 def get_year_table(region,year,edu_type,save_file=True):
     folder_name = 'middle' if edu_type == 'СПО' else 'higher'
-    reports_path = f'{DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
+    reports_path = f'{INPUT_DATA_PATH}ministry_reports/{folder_name}/Своды {edu_type}-1 {year}/'
     region_filenames = get_region_filenames(year,edu_type)
 
     df_list = []
@@ -259,7 +260,7 @@ def get_year_table(region,year,edu_type,save_file=True):
             ['major','code'])[year_list].sum().sort_values('code').reset_index()
         
         if save_file:
-            res.to_csv(f'{DATA_PATH}year_table_{region}_{edu_type}_{year}.csv')
+            res.to_csv(f'{OUTPUT_DATA_PATH}year_table_{region}_{edu_type}_{year}.csv')
 
         return res
 
@@ -278,7 +279,7 @@ def get_region_table(region,year,edu_type,save_file=True):
         lambda left,right: pd.merge(left,right,on=['major','code'],how='outer'), non_empty_dfs)
     
     if save_file:
-        res.to_csv(f'{DATA_PATH}region_table_{region}_{edu_type}_{year}.csv')
+        res.to_csv(f'{OUTPUT_DATA_PATH}region_table_{region}_{edu_type}_{year}.csv')
 
     return res
 
@@ -324,6 +325,6 @@ def get_all_regions_table(edu_type='', year_min = 2015, year_max = 2021,save_fil
 
     if save_file:
         filename = f'table0_raw_{edu_type}.csv' if edu_type != '' else 'table0_raw.csv'
-        final_df.to_csv(f'{DATA_PATH}{filename}')
+        final_df.to_csv(f'{OUTPUT_DATA_PATH}{filename}')
 
     return final_df
