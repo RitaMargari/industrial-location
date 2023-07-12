@@ -4,7 +4,8 @@ from tqdm import tqdm
 pd.options.mode.chained_assignment = None
 
 MAIN_PATH = '/Users/leonidharlov/Documents/Industrial Potential/data/FINAL/'
-DATA_PATH = f'{MAIN_PATH}data/'
+OUTPUT_DATA_PATH = f'{MAIN_PATH}output_data/'
+INPUT_DATA_PATH = f'{MAIN_PATH}input_data/'
 
 # returns group code from a code of the programm
 def extract_code_group(x):
@@ -139,7 +140,7 @@ def get_retention(x, df):
 
 # add information about education domain
 def add_edu_domain_info(df):
-    code_group_to_edu_domain = pd.read_csv(f'{DATA_PATH}code_group_to_edu_domain.csv')
+    code_group_to_edu_domain = pd.read_csv(f'{INPUT_DATA_PATH}code_group_to_edu_domain.csv')
     df = df.merge(code_group_to_edu_domain,how='left')
     # fill missing education domains
     domain_replace_dict = df.dropna(subset=['edu_domain']).groupby('major')['edu_domain'].first().to_dict()
@@ -189,6 +190,6 @@ def filter_education_df(df,save_file=True):
     df = df.query('retention < @retention_higher_treshold')
     
     if save_file:
-        df.to_csv(f'{DATA_PATH}table0_filtered.csv')
+        df.to_csv(f'{OUTPUT_DATA_PATH}table0_filtered.csv')
 
     return df
