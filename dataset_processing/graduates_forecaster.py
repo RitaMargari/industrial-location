@@ -21,7 +21,7 @@ def get_forecast_df(table0,table1,save_file=False):
         lambda x: median_retention_per_group[x['code_group']] if pd.isna(x['retention']) and x['code_group'] in median_retention_per_group else x['retention'],axis=1)
 
     median_duration_per_group = table1.groupby(
-        'code_group')['programme_duration'].median().to_dict()
+        'code_group')['programme_duration'].median().dropna().to_dict()
     table1['programme_duration'] = table1.apply(
         lambda x: median_duration_per_group[x['code_group']] if pd.isna(x['programme_duration']) and x['code_group'] in median_retention_per_group else x['programme_duration'],
         axis=1).astype(int)
