@@ -3,7 +3,7 @@ import pandas as pd
 pd.options.mode.chained_assignment = None
 
 MAIN_PATH = '/Users/leonidharlov/Documents/Industrial Potential/data/FINAL/'
-DATA_PATH = f'{MAIN_PATH}data/'
+OUTPUT_DATA_PATH = f'{MAIN_PATH}output_data/'
 
 def forecast_graduates(students_total,retention):
     return np.round(students_total * retention)
@@ -36,6 +36,6 @@ def get_forecast_df(table0,table1,save_file=False):
             'programme_duration']).round().astype(int)
     
     if save_file:
-        table1.to_csv(f'{DATA_PATH}table1.csv')
+        table1.to_csv(f'{OUTPUT_DATA_PATH}table1.csv')
 
     return table1
