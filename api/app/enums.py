@@ -17,3 +17,9 @@ class IndustryEnums(str, Enum):
     CHEMICAL = 'chemical'
     PHARMA = 'pharma'
     ELECTRONICS = 'electronics'
+
+
+class WorkForce(str, Enum):
+    ALL = 'all'
+    SPECIALISTS = 'specialists'
+    GRADUATES = 'graduates'

@@ -29,6 +29,7 @@ class Tags(str, enums.AutoName):
     industry = auto()
     specialities = auto()
     edu_groups = auto()
+    estimates = auto()
 
 
 @router.get("/")
@@ -56,6 +57,17 @@ def get_ontology_specialities(query_params: schemas.OntologyQueryParams = Depend
     '/ontology/get_edu_groups',
     response_model=dict, tags=[Tags.edu_groups]
 )
-def get_ontology_specialities(query_params: schemas.OntologyQueryParams = Depends()):
+def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends()):
     result = func.get_ontology_edu_groups(ontology=ontology, idustry_code=query_params.idustry_code)
+    return result
+
+@router.post(
+    '/calculation/estimates',
+    response_model=FeatureCollection, tags=[Tags.edu_groups]
+)
+def get_potential_estimates(query_params: schemas.EstimatesIn):
+    result = func.get_potential_estimates(
+        ontology=ontology, cv=cv, graduates=graduates, cities=cities, 
+        workforce_type = query_params.workforce_type, specialities=query_params.specialities, edu_groups=query_params.edu_groups
+        )
     return result

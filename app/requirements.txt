@@ -1,4 +1,0 @@
-fastapi==0.100.0
-geojson_pydantic==0.3.3
-pandas==1.5.1
-pydantic==1.9.1
