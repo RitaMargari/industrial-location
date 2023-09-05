@@ -59,7 +59,7 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     all_specialities = ontology.set_index("speciality_id")["speciality"].drop_duplicates()
     all_edu_groups = ontology.set_index("edu_group_id")[["type", "edu_group_code"]].drop_duplicates()
 
-    cities = cities.set_index("city")
+    cities = cities.set_index("region_city")
     cities["estimate"] = 0
 
     if workforce_type == "graduates" or workforce_type == "all":
@@ -99,7 +99,11 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
-    return  json.loads(cities.reset_index().to_json())
+    cities = cities.reset_index().reindex([
+        "region", "city", "region_city", "population", "estimate", "graduates_forecast_number", 
+        "graduates_forecast_sum_number", "specialists_number", "specialists_sum_number", "geometry"
+        ], axis=1)
+    return  json.loads(cities.to_json())
 
 
 '''
@@ -108,14 +112,14 @@ based on the information about graduates
 '''
 def estimate_graduates(graduates: DataFrame, cities: DataFrame, edu_groups: DataFrame):
             
-        graduates = pd.DataFrame(graduates.groupby(["city", "type", "edu_group_code"])["graduates_forecast"].sum())
+        graduates = pd.DataFrame(graduates.groupby(["region_city", "type", "edu_group_code"])["graduates_forecast"].sum())
         graduates = graduates.join(edu_groups, on=["type", "edu_group_code"]).dropna(subset=["weights"])
         graduates["graduates_weighted"] = graduates["graduates_forecast"] * graduates["weights"]
 
-        graduates_cities_gr = graduates.groupby(["city"])
+        graduates_cities_gr = graduates.groupby(["region_city"])
         graduates_cities = graduates_cities_gr[["graduates_forecast", "graduates_weighted"]].sum().add_suffix("_sum")
         graduates_cities["graduates_forecast"] = graduates_cities_gr.apply(
-            lambda x: x["graduates_forecast"].droplevel("city").to_dict()
+            lambda x: x["graduates_forecast"].droplevel("region_city").to_dict()
             )
         graduates_cities["graduates_forecast"] = graduates_cities["graduates_forecast"].apply(lambda x: str(x) if x else x)
 
@@ -143,11 +147,11 @@ based on the information about open CVs
 def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
 
     cv_select = cv[cv["hh_names"].isin(specialities["speciality"])]
-    cv_select = cv_select.groupby(["city", "hh_names"])["id_cv"].count().rename("cv_count").reset_index()
+    cv_select = cv_select.groupby(["region_city", "hh_names"])["id_cv"].count().rename("cv_count").reset_index()
     cv_select = cv_select.join(specialities.set_index("speciality")["weights"], on="hh_names")
     cv_select["cv_count_weighted"] = cv_select["cv_count"] * cv_select["weights"]
 
-    cv_cities_gr = cv_select.groupby(["city"])
+    cv_cities_gr = cv_select.groupby(["region_city"])
     cv_cities = cv_cities_gr[["cv_count", "cv_count_weighted"]].sum().add_suffix("_sum")
     cv_cities["cv_count"] = cv_cities_gr[["hh_names", "cv_count"]].apply(
         lambda x: x.set_index("hh_names")["cv_count"].to_dict()
