@@ -42,7 +42,7 @@ async def read_root():
     response_model=dict, tags=[Tags.industry]
 )
 def get_ontology_industry(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_industry(ontology=ontology, idustry_code=query_params.idustry_code)
+    result = func.get_ontology_industry(ontology=ontology, industry_code=query_params.industry_code)
     return result
 
 @router.get(
@@ -50,7 +50,7 @@ def get_ontology_industry(query_params: schemas.OntologyQueryParams = Depends())
     response_model=dict, tags=[Tags.specialities]
 )
 def get_ontology_specialities(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_specialities(ontology=ontology, idustry_code=query_params.idustry_code)
+    result = func.get_ontology_specialities(ontology=ontology, industry_code=query_params.industry_code)
     return result
 
 @router.get(
@@ -58,7 +58,7 @@ def get_ontology_specialities(query_params: schemas.OntologyQueryParams = Depend
     response_model=dict, tags=[Tags.edu_groups]
 )
 def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_edu_groups(ontology=ontology, idustry_code=query_params.idustry_code)
+    result = func.get_ontology_edu_groups(ontology=ontology, industry_code=query_params.industry_code)
     return result
 
 @router.post(

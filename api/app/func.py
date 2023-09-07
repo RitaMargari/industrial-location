@@ -7,25 +7,25 @@ from sklearn.preprocessing import MinMaxScaler
 from pandas.core.frame import DataFrame
 
 
-'''Returns json containing the ontology of industries (full [idustry_code = None] or for specified industry)'''
-def get_ontology_industry(ontology: DataFrame, idustry_code: Optional[str] = None):
+'''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
+def get_ontology_industry(ontology: DataFrame, industry_code: Optional[str] = None):
 
-    industry = ontology[ontology["idustry_code"] == idustry_code] if idustry_code else ontology
+    industry = ontology[ontology["industry_code"] == industry_code] if industry_code else ontology
     return eval(industry.reset_index(drop=True).to_json())
 
 
-'''Returns dict with key-value pairs speciality_id-speciality for all industries [idustry_code = None] or for specified one'''
-def get_ontology_specialities(ontology: DataFrame, idustry_code: Optional[str] = None):
+'''Returns dict with key-value pairs speciality_id-speciality for all industries [industry_code = None] or for specified one'''
+def get_ontology_specialities(ontology: DataFrame, industry_code: Optional[str] = None):
 
-    industry = ontology[ontology["idustry_code"] == idustry_code] if idustry_code else ontology
+    industry = ontology[ontology["industry_code"] == industry_code] if industry_code else ontology
     specialities = industry.set_index("speciality_id")["speciality"].to_dict()
     return specialities
 
 
-'''Returns dict with key-value pairs edu_group_id-edu_group for all industries [idustry_code = None] or for specified one'''
-def get_ontology_edu_groups(ontology: DataFrame, idustry_code: Optional[str] = None):
+'''Returns dict with key-value pairs edu_group_id-edu_group for all industries [industry_code = None] or for specified one'''
+def get_ontology_edu_groups(ontology: DataFrame, industry_code: Optional[str] = None):
 
-    industry = ontology[ontology["idustry_code"] == idustry_code] if idustry_code else ontology
+    industry = ontology[ontology["industry_code"] == industry_code] if industry_code else ontology
     edu_groups = dict(((
         i, industry[industry["type"] == i].set_index("edu_group_id")["edu_group"].to_dict()
         ) for i in industry["type"].unique()))
