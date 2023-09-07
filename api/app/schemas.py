@@ -5,14 +5,14 @@ from typing import Optional, List
 
 class OntologyQueryParams:
     def __init__(self,
-                 idustry_code: Optional[enums.IndustryEnums] = None,
+                 industry_code: Optional[enums.IndustryEnums] = None,
                  ):
-        self.idustry_code = idustry_code
+        self.industry_code = industry_code
 
     class Config:
         schema_extra = {
             'example': [
-                {'idustry_code': 'pharma',}
+                {'industry_code': 'pharma',}
             ]
         }
 
