@@ -1,7 +1,8 @@
+from pandas.core.frame import DataFrame
 import pandas as pd
 import geopandas as gpd
 import networkx as nx
-from tqdm import tqdm
+
 from typing import Optional, List
 
 
@@ -25,12 +26,11 @@ class NetworkConstruction:
 
         return responses
 
-    def filter_responses_by_industry(
-        cv_years, cv, specialists, ontology, industry: list = []
-    ):
+    def filter_responses_by_industry(responses, cv, specialists, ontology, industry):
         if industry:
-            cv_years = cv_years[
-                cv_years["id_cv"].isin(
+            print('industry')
+            responses = responses[
+                responses["id_cv"].isin(
                     cv[
                         cv["id_candidate"].isin(
                             specialists[
@@ -45,12 +45,12 @@ class NetworkConstruction:
                 )
             ]
 
-        return cv_years
+        return responses
 
-    def filter_responses_by_speciality(cv_years, cv, specialists, group: list = []):
+    def filter_responses_by_speciality(responses, cv, specialists, group):
         if group:
-            cv_years = cv_years[
-                cv_years["id_cv"].isin(
+            responses = responses[
+                responses["id_cv"].isin(
                     cv[
                         cv["id_candidate"].isin(
                             specialists[specialists["label"].isin(group)][
@@ -61,7 +61,7 @@ class NetworkConstruction:
                 )
             ]
 
-        return cv_years
+        return responses
 
     def get_response_year(responses):
         responses.loc[:, "year"] = responses["date_creation"].apply(
@@ -228,7 +228,7 @@ class NetworkConstruction:
         for row in edges.itertuples():
             G.add_edge(row.city_cv, row.city_vacancy, weight=row.weight)
 
-        for node in tqdm(G.nodes()):
+        for node in G.nodes():
             if node in cities_gdf["city"].values:
                 G.nodes[node]["geometry"] = str(
                     cities_gdf.loc[cities_gdf["city"] == node, "geometry"].item()
@@ -237,23 +237,23 @@ class NetworkConstruction:
         return G
 
     def run_pipeline(
-        responses,
+        responses=None,
         vacancies=None,
         kladr_2021=None,
         organizations=None,
         dadata_organisations_info=None,
         cv_years=None,
         cv_cities=None,
-        cv=None,
-        ontology=None,
-        specialists=None,
+        cv: Optional[DataFrame] = None,
+        ontology: Optional[DataFrame] = None,
+        specialists: Optional[DataFrame] = None,
         group: Optional[List] = None,
         industries: Optional[List] = None,
         years: Optional[List] = None,
+        pre_calculated_responses: DataFrame = None,
         return_responses=False,
-        pre_calculated_responses=False,
     ):
-        if not pre_calculated_responses:
+        if not isinstance(pre_calculated_responses, DataFrame):
             vacancies = vacancies.pipe(NetworkConstruction.rename_vacancies_coordinates)
             kladr_2021 = kladr_2021.pipe(NetworkConstruction.filter_kladr)
             cv_years = cv_years.pipe(
@@ -278,26 +278,29 @@ class NetworkConstruction:
                 organisation_ids,
             )
 
-            responses = (
-                responses.pipe(
-                    NetworkConstruction.merge_responses_org_cities, organizations
-                )
-                .pipe(NetworkConstruction.drop_responses_without_city)
-                .pipe(NetworkConstruction.filter_responses_by_years, years)
-                .pipe(
-                    NetworkConstruction.filter_responses_by_industry,
-                    cv,
-                    specialists,
-                    ontology,
-                    industries,
-                )
-                .pipe(
-                    NetworkConstruction.filter_responses_by_speciality,
-                    cv,
-                    specialists,
-                    group,
-                )
+            responses = responses.pipe(
+                NetworkConstruction.merge_responses_org_cities, organizations
+            ).pipe(NetworkConstruction.drop_responses_without_city)
+
+        else:
+            responses = pre_calculated_responses
+
+        responses = (
+            responses.pipe(NetworkConstruction.filter_responses_by_years, years)
+            .pipe(
+                NetworkConstruction.filter_responses_by_industry,
+                cv,
+                specialists,
+                ontology,
+                industries,
             )
+            .pipe(
+                NetworkConstruction.filter_responses_by_speciality,
+                cv,
+                specialists,
+                group,
+            )
+        )
 
         cities_gdf = responses.pipe(NetworkConstruction.create_cities_gdf)
         edges = responses.pipe(NetworkConstruction.create_edges, cities_gdf)
