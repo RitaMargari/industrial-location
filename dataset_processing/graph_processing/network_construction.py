@@ -1,3 +1,7 @@
+"""
+This module provides necessary functionality to construct a migration graph
+"""
+
 from pandas.core.frame import DataFrame
 import pandas as pd
 import geopandas as gpd
@@ -10,7 +14,11 @@ class NetworkConstruction:
     def __init__():
         pass
 
-    def filter_responses(responses):
+    def filter_responses_columns(responses: DataFrame) -> DataFrame:
+        """
+        This method selects only necessary columns from the responses DataFrame
+        """
+
         responses = responses[
             [
                 "date_creation",
@@ -21,55 +29,54 @@ class NetworkConstruction:
                 "id_vacancy",
                 "region_code",
                 "response_type",
+                "label",
+                "industry",
             ]
         ]
 
         return responses
 
-    def filter_responses_by_industry(responses, cv, specialists, ontology, industry):
-        if industry:
-            print('industry')
+    def filter_responses_by_industry(
+        responses: DataFrame,
+        industries: List[str],
+    ) -> DataFrame:
+        """
+        This method filters responses DataFrame by selected industry
+        based on the list of industries
+        """
+
+        if industries:
             responses = responses[
-                responses["id_cv"].isin(
-                    cv[
-                        cv["id_candidate"].isin(
-                            specialists[
-                                specialists["label"].isin(
-                                    ontology[ontology["Отрасль"].isin(industry)][
-                                        "Специальность"
-                                    ]
-                                )
-                            ]["id_candidate"]
-                        )
-                    ]["id_cv"]
-                )
+                responses["industry"].str.contains("|".join(industries))
             ]
 
         return responses
 
-    def filter_responses_by_speciality(responses, cv, specialists, group):
+    def filter_responses_by_speciality(
+        responses: DataFrame, group: List[str]
+    ) -> DataFrame:
+        """
+        This method filters responses DataFrame by selected industry
+        based on the list of specialists professions
+        """
+
         if group:
-            responses = responses[
-                responses["id_cv"].isin(
-                    cv[
-                        cv["id_candidate"].isin(
-                            specialists[specialists["label"].isin(group)][
-                                "id_candidate"
-                            ]
-                        )
-                    ]["id_cv"]
-                )
-            ]
+            responses = responses[responses["label"].isin(group)]
 
         return responses
 
-    def get_response_year(responses):
+    def get_response_year(responses: DataFrame) -> DataFrame:
+        """
+        This method selects only rows that contain satisfies specified years
+        from the responses DataFrame
+        """
+
         responses.loc[:, "year"] = responses["date_creation"].apply(
             lambda x: int(float(x.split("-")[0]))
         )
         return responses
 
-    def rename_vacancies_coordinates(vacancies):
+    def rename_vacancies_coordinates(vacancies: DataFrame) -> DataFrame:
         vacancies = vacancies.rename(
             columns={
                 "job_location_geo_latitude": "x",
@@ -78,7 +85,7 @@ class NetworkConstruction:
         )
         return vacancies
 
-    def filter_kladr(kladr_2021):
+    def filter_kladr(kladr_2021: DataFrame) -> DataFrame:
         kladr_2021 = kladr_2021[
             (kladr_2021["region_name"] != "Москва")
             & (kladr_2021["region_name"] != "Санкт-Петербург")
@@ -87,7 +94,7 @@ class NetworkConstruction:
 
         return kladr_2021
 
-    def filter_cv_years(cv_years, kladr_2021, cv_cities):
+    def filter_cv_years(cv_years, kladr_2021, cv_cities) -> DataFrame:
         regions = list(kladr_2021["region_name"].unique())
         cv_cities = cv_cities[~cv_cities["city"].isin(regions)]
 
@@ -98,7 +105,7 @@ class NetworkConstruction:
 
         return cv_years
 
-    def merge_responses_cv_vacancy(responses, cv_years, vacancies):
+    def merge_responses_cv_vacancy(responses, cv_years, vacancies) -> DataFrame:
         responses = responses.merge(
             cv_years[["id_cv", "year", "city", "x", "y"]],
             left_on=["id_cv", "year"],
@@ -113,7 +120,7 @@ class NetworkConstruction:
         )
         return responses
 
-    def filter_organisations(organizations, responses):
+    def filter_organisations(organizations, responses) -> DataFrame:
         organizations["org_code"] = organizations["inn"].fillna(organizations["ogrn"])
         organization_list = responses[responses["city_vacancy"].isna()][
             "id_hiring_organization"
@@ -126,7 +133,7 @@ class NetworkConstruction:
 
         return org_codes
 
-    def filter_companies_info(organizations, org_cities, org_codes):
+    def filter_companies_info(organizations, org_cities, org_codes) -> DataFrame:
         org_cities["org_code"] = org_codes
         org_cities["data.address.data.city"] = org_cities[
             "data.address.data.city"
@@ -159,7 +166,7 @@ class NetworkConstruction:
 
         return org_cities
 
-    def merge_responses_org_cities(responses, org_cities):
+    def merge_responses_org_cities(responses, org_cities) -> DataFrame:
         responses = responses.join(
             org_cities.set_index("id_organization")[["city", "geo_lat", "geo_lon"]],
             on="id_hiring_organization",
@@ -170,17 +177,17 @@ class NetworkConstruction:
 
         return responses
 
-    def filter_responses_by_years(responses, years):
+    def filter_responses_by_years(responses, years) -> DataFrame:
         if years:
             responses = responses[responses["year"].isin(years)]
         return responses
 
-    def drop_responses_without_city(responses):
+    def drop_responses_without_city(responses) -> DataFrame:
         responses = responses.dropna(subset=["city_vacancy"])
 
         return responses
 
-    def create_cities_gdf(responses):
+    def create_cities_gdf(responses) -> DataFrame:
         cities_gdf = (
             pd.concat(
                 [
@@ -208,7 +215,7 @@ class NetworkConstruction:
 
         return cities_gdf
 
-    def create_edges(responses, cities_gdf):
+    def create_edges(responses, cities_gdf) -> DataFrame:
         edges = (
             responses.groupby(["city_cv", "city_vacancy"])
             .size()
@@ -221,7 +228,7 @@ class NetworkConstruction:
 
         return edges
 
-    def create_G(cities_gdf, edges):
+    def create_G(cities_gdf, edges) -> nx.DiGraph:
         G = nx.DiGraph()
         G.add_nodes_from(cities_gdf["city"].values)
 
@@ -244,9 +251,6 @@ class NetworkConstruction:
         dadata_organisations_info=None,
         cv_years=None,
         cv_cities=None,
-        cv: Optional[DataFrame] = None,
-        ontology: Optional[DataFrame] = None,
-        specialists: Optional[DataFrame] = None,
         group: Optional[List] = None,
         industries: Optional[List] = None,
         years: Optional[List] = None,
@@ -261,7 +265,7 @@ class NetworkConstruction:
             )
 
             responses = (
-                responses.pipe(NetworkConstruction.filter_responses)
+                responses.pipe(NetworkConstruction.filter_responses_columns)
                 .pipe(NetworkConstruction.get_response_year)
                 .pipe(
                     NetworkConstruction.merge_responses_cv_vacancy, cv_years, vacancies
@@ -285,21 +289,14 @@ class NetworkConstruction:
         else:
             responses = pre_calculated_responses
 
-        responses = (
-            responses.pipe(NetworkConstruction.filter_responses_by_years, years)
-            .pipe(
-                NetworkConstruction.filter_responses_by_industry,
-                cv,
-                specialists,
-                ontology,
-                industries,
-            )
-            .pipe(
-                NetworkConstruction.filter_responses_by_speciality,
-                cv,
-                specialists,
-                group,
-            )
+        responses = responses.pipe(NetworkConstruction.filter_responses_by_years, years)
+        responses = responses.pipe(
+            NetworkConstruction.filter_responses_by_industry,
+            industries,
+        )
+        responses = responses.pipe(
+            NetworkConstruction.filter_responses_by_speciality,
+            group,
         )
 
         cities_gdf = responses.pipe(NetworkConstruction.create_cities_gdf)
