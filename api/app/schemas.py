@@ -22,9 +22,9 @@ class EstimatesIn(BaseModel):
     edu_groups: Optional[dict]
 
 
-    @root_validator
+    @root_validator(pre=False, skip_on_failure=True)
     def check_user_dict_format(cls, values):
-        for var, var_name in zip([values["specialities"], values["edu_groups"]], ["specialities", "edu_groups"]):
+        for var, var_name in zip([eval(values["specialities"]), eval(values["edu_groups"])], ["specialities", "edu_groups"]):
             if var is None: break
             if not all(isinstance(eval(x), int) for x in list(var.keys())): 
                 raise TypeError(f"The keys in {var_name} must be inetegers.")
@@ -36,7 +36,7 @@ class EstimatesIn(BaseModel):
         return values
         
 
-    @root_validator
+    @root_validator(pre=False, skip_on_failure=True)
     def check_user_workforce_option(cls, values):
         
         if "workforce_type" in values: 
