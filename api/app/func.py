@@ -147,6 +147,12 @@ based on the information about open CVs
 def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
 
     cv_select = cv[cv["hh_names"].isin(specialities["speciality"])]
+    if len(cv_select) == 0:
+        cities["specialists_sum_number"] = 0
+        cities["specialists_number"] = None
+        cities["estimate"] = cities["estimate"].add(0).fillna(cities["estimate"]).dropna()
+        return cities
+
     cv_select = cv_select.groupby(["region_city", "hh_names"])["id_cv"].count().rename("cv_count").reset_index()
     cv_select = cv_select.join(specialities.set_index("speciality")["weights"], on="hh_names")
     cv_select["cv_count_weighted"] = cv_select["cv_count"] * cv_select["weights"]
