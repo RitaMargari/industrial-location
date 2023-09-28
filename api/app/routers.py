@@ -29,6 +29,7 @@ cities = gpd.read_file("app/data/cities.geojson", index_col=0).drop_duplicates(
 
 house_prices = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_d = nx.read_graphml("app/data/G_drive.graphml")
+G_t = nx.read_graphml("app/data/G_transport.graphml")
 
 
 class Tags(str, enums.AutoName):
@@ -39,6 +40,7 @@ class Tags(str, enums.AutoName):
     specialities = auto()
     edu_groups = auto()
     estimates = auto()
+    jhm_metric = auto()
 
 
 @router.get("/")
@@ -89,6 +91,7 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 @router.get(
     "/metrics/get_jhm_metric",
     response_model=dict,
+    tags=[Tags.jhm_metric]
 )
 def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
     global_crs = 4326
@@ -103,14 +106,25 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
         )
     )
 
+    graph_type = {
+        'public_transport': G_t,
+        "private_car": G_d,
+    }
+
     return JhmMetric.main(
-        G=G_d,
+        G=graph_type[query_params.transportation_type],
         house_prices=house_prices,
         company_location=company_location,
         salary=query_params.salary,
-        room_area_m2=query_params.room_area_m2,
+
+        # TODO: constant value, change to some average value for rent price
+        room_area_m2=35,
+
+        # not for user params
         filter_coef=query_params.filter_coef,
         return_json=query_params.return_json,
-        local_crs=local_crs,
         debug_mode=query_params.debug_mode,
+
+        # TODO: add a dict of cities and their local crs systems
+        local_crs=local_crs,
     )

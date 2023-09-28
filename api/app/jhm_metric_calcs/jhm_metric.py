@@ -14,7 +14,7 @@ class JhmMetric:
         house_prices: gpd.GeoDataFrame,
         company_location: Point,
         local_crs: int,
-    ) -> gpd.GeoDataFrame:
+    ) -> gpd.FeatureCollection:
         """
         Graph calcs
         """

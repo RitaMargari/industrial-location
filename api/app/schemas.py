@@ -92,7 +92,25 @@ class JhmQueryParams(BaseModel):
     company_location_x: float
     company_location_y: float
     salary: int
-    room_area_m2: int
+    transportation_type: enums.Transportation
+    # industry_code: Optional[enums.IndustryEnums] = None,
+    # workforce_type: enums.WorkForce
+
+
     debug_mode: Optional[bool]
     filter_coef: Optional[bool]
     return_json: Optional[bool]
+
+    class Config:
+        schema_extra = {
+            "example": [
+                {
+                    "company_location_x": 59.860510,
+                    "company_location_y": 30.211518,
+                    "transportation_type": 'public_transport',
+                    # "industry_code": Optional[enums.IndustryEnums] = None,
+                    "salary": 70000
+                    # "workforce_type": enums.WorkForce
+                }
+            ]
+        }
