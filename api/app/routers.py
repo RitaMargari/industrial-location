@@ -4,7 +4,7 @@ import geopandas as gpd
 import app.func as func
 from shapely.geometry import Point
 import pyproj
-from app.jhm_metric_calcs.jhm_metric import JhmMetric
+from app.jhm_metric_calcs import jhm_metric
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -29,7 +29,8 @@ cities = gpd.read_file("app/data/cities.geojson", index_col=0).drop_duplicates(
 
 house_prices = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_d = nx.read_graphml("app/data/G_drive.graphml")
-G_t = nx.read_graphml("app/data/G_transport.graphml")
+# G_t = nx.read_graphml("app/data/G_transport.graphml")
+G_t = None
 
 
 class Tags(str, enums.AutoName):
@@ -88,17 +89,15 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
     return result
 
 
-@router.get("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
+@router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
 
     DEFAULT_ROOM_AREA = 35
     DEFAULT_IF_FILTER_COEF = True
-    DEFAULT_IF_RETURN_JSON = False
     DEFAULT_IF_DEBUG_MODE = True
 
     room_area_m2 = DEFAULT_ROOM_AREA
     filter_coef = query_params.filter_coef or DEFAULT_IF_FILTER_COEF
-    return_json = query_params.return_json or DEFAULT_IF_RETURN_JSON
     debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
 
     graph_type = {
@@ -115,12 +114,12 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
                 house_prices=house_prices,
                 company_location=query_params.company_location,
                 salary=element.salary,
+
                 # TODO: constant value, change to some average value for rent price
                 room_area_m2=room_area_m2,
 
                 # debug params
                 filter_coef=filter_coef,
-                return_json=return_json,
                 debug_mode=debug_mode
             )
         )

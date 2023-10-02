@@ -69,7 +69,7 @@ def get_nk_distances(nk_dists, source_nodes, target_node):
     return distances
 
 def fix_crs(gdf):
-    gdf_crs =  gdf.crs.to_epsg()
+    gdf_crs = gdf.crs.to_epsg()
 
     if gdf_crs == 4326:
         gdf = gdf.to_crs(gdf.estimate_utm_crs().to_epsg())
@@ -79,13 +79,14 @@ def fix_crs(gdf):
     return gdf
 
 def G_to_gdf(G: nx.DiGraph):
-    global_crs = 4326
+    # global_crs = 4326
+    local_crs = 32636
 
     graph_df = pd.DataFrame.from_dict(dict(G.nodes(data=True)), orient="index")
     graph_gdf = gpd.GeoDataFrame(
         graph_df,
         geometry=gpd.points_from_xy(graph_df["x"], graph_df["y"]),
-        crs=global_crs
+        crs=local_crs
     )
 
     graph_gdf = fix_crs(graph_gdf)
@@ -96,7 +97,7 @@ def G_to_gdf(G: nx.DiGraph):
     graph_gdf2 = gpd.GeoDataFrame(
         graph_df2,
         geometry=gpd.points_from_xy(graph_df2["x"], graph_df2["y"]),
-        crs=global_crs,
+        crs=local_crs,
     )
 
     graph_gdf2 = fix_crs(graph_gdf2)

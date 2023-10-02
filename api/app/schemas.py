@@ -1,7 +1,7 @@
 import app.enums as enums
 
 from pydantic import BaseModel, root_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 
 class OntologyQueryParams:
@@ -89,29 +89,28 @@ class EstimatesIn(BaseModel):
 
 
 class Workers(BaseModel):
-    speciality: float
-    salary: int
+    speciality: str = "worker_1"
+    salary: int = 75_000
 
 
 class JhmQueryParams(BaseModel):
-    company_location: List[float]
+
     worker_and_salary: List[Workers]
-
     transportation_type: enums.Transportation
+    company_location: Dict[str, float] = {"lat": 59.860510, "lon": 30.211518}
+    debug_mode: Optional[bool] = True
+    filter_coef: Optional[bool] = True
 
-    debug_mode: Optional[bool]
-    filter_coef: Optional[bool]
-    return_json: Optional[bool]
 
     class Config:
-        arbitrary_types_allowed = True 
-        
+        arbitrary_types_allowed = True
+
         schema_extra = {
             "example": [
                 {
-                    "company_location_x": [59.860510, 30.211518],
-                    "transportation_type": 'private_car',
-                    "salary": 70000
+                    "company_location": {"lat": 59.860510, "lon": 30.211518},
+                    "transportation_type": "private_car",
+                    "worker_and_salary": [{"speciality": "worker_2", "salary": 70000}],
                 }
             ]
         }

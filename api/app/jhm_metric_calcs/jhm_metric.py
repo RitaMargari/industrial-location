@@ -65,7 +65,7 @@ def calc_coef(
     return house_prices
 
 
-def filter_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
+def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
     least_comfortable_coef_value = 0.7
     if filter:
         res = res[res["coef"] <= least_comfortable_coef_value]
@@ -74,8 +74,8 @@ def filter_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
 
 def fix_company_location_coords(company_location: list) -> Point:
     global_crs = 4326
-    lon = company_location[0]
-    lat = company_location[1]
+    lon = company_location['lon']
+    lat = company_location['lat']
     local_crs = utils.convert_wgs_to_utm(lon=lon, lat=lat)
     company_location = Point(pyproj.transform(global_crs, local_crs, lon, lat))
 
@@ -85,26 +85,27 @@ def fix_company_location_coords(company_location: list) -> Point:
 def main(
     G: nx.DiGraph,
     house_prices: gpd.GeoDataFrame,
-    company_location: list,
+    company_location: dict,
     salary: int,
     room_area_m2: int,
     filter_coef=True,
-    debug_mode=False,
+    debug_mode=True,
 ) -> dict:
     company_location = fix_company_location_coords(company_location)
 
     res = (
         get_distance_to_work(G, house_prices, company_location)
         .pipe(calc_coef, salary, room_area_m2)
-        .pipe(filter_coef, filter_coef)
+        .pipe(filter_final_coef, filter_coef)
     )
 
-    if debug_mode:
-        # debug mode return histogram values since swager ui cant load whole geojson as an output
-        bins = 40
-        out = pd.cut(res["coef"], bins=bins, ordered=True).value_counts().to_dict()
-        out = {str(key): value for key, value in out.items()}
-        return out
+    # if debug_mode:
+    #     # debug mode return histogram values since swager ui cant load whole geojson as an output
+    #     bins = 40
+    #     out = pd.cut(res["coef"], bins=bins, ordered=True).value_counts().to_dict()
+    #     out = {str(key): value for key, value in out.items()}
+    #     return out
 
-    else:
-        return res.to_dict(orient="records")
+    # else:
+    
+    return res

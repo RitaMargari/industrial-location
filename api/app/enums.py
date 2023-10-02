@@ -25,5 +25,5 @@ class WorkForce(str, Enum):
     GRADUATES = 'graduates'
 
 class Transportation(str, Enum):
-    PUBLIC_TRANSPORT = 'public_transport',
     PRIVATE_CAR = 'private_car'
+    PUBLIC_TRANSPORT = 'public_transport',
