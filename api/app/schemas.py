@@ -88,29 +88,30 @@ class EstimatesIn(BaseModel):
         }
 
 
-class JhmQueryParams(BaseModel):
-    company_location_x: float
-    company_location_y: float
+class Workers(BaseModel):
+    speciality: float
     salary: int
-    transportation_type: enums.Transportation
-    # industry_code: Optional[enums.IndustryEnums] = None,
-    # workforce_type: enums.WorkForce
 
+
+class JhmQueryParams(BaseModel):
+    company_location: List[float]
+    worker_and_salary: List[Workers]
+
+    transportation_type: enums.Transportation
 
     debug_mode: Optional[bool]
     filter_coef: Optional[bool]
     return_json: Optional[bool]
 
     class Config:
+        arbitrary_types_allowed = True 
+        
         schema_extra = {
             "example": [
                 {
-                    "company_location_x": 59.860510,
-                    "company_location_y": 30.211518,
-                    "transportation_type": 'public_transport',
-                    # "industry_code": Optional[enums.IndustryEnums] = None,
+                    "company_location_x": [59.860510, 30.211518],
+                    "transportation_type": 'private_car',
                     "salary": 70000
-                    # "workforce_type": enums.WorkForce
                 }
             ]
         }

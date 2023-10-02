@@ -2,6 +2,7 @@ import networkit as nk
 import pandas as pd
 import geopandas as gpd
 import networkx as nx
+import math
 
 
 def get_nx2_nk_idmap(G_nx):
@@ -67,14 +68,27 @@ def get_nk_distances(nk_dists, source_nodes, target_node):
     distances = [nk_dists.getDistance(target_node, node) for node in source_nodes]
     return distances
 
-def G_to_gdf(G: nx.DiGraph, local_crs: int):
+def fix_crs(gdf):
+    gdf_crs =  gdf.crs.to_epsg()
+
+    if gdf_crs == 4326:
+        gdf = gdf.to_crs(gdf.estimate_utm_crs().to_epsg())
+    else:
+        pass
+    
+    return gdf
+
+def G_to_gdf(G: nx.DiGraph):
+    global_crs = 4326
+
     graph_df = pd.DataFrame.from_dict(dict(G.nodes(data=True)), orient="index")
     graph_gdf = gpd.GeoDataFrame(
         graph_df,
         geometry=gpd.points_from_xy(graph_df["x"], graph_df["y"]),
-        crs=local_crs,
+        crs=global_crs
     )
 
+    graph_gdf = fix_crs(graph_gdf)
     G_nx = G.subgraph(graph_gdf.index)
     G_nx2 = nx.convert_node_labels_to_integers(G_nx)
 
@@ -82,10 +96,23 @@ def G_to_gdf(G: nx.DiGraph, local_crs: int):
     graph_gdf2 = gpd.GeoDataFrame(
         graph_df2,
         geometry=gpd.points_from_xy(graph_df2["x"], graph_df2["y"]),
-        crs=local_crs,
+        crs=global_crs,
     )
 
+    graph_gdf2 = fix_crs(graph_gdf2)
+
     return graph_gdf2, G_nx2
+
+def convert_wgs_to_utm(lon: float, lat: float):
+    """Based on lat and lng, return best utm epsg-code"""
+    utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
+    if len(utm_band) == 1:
+        utm_band = "0" + utm_band
+    if lat >= 0:
+        epsg_code = "326" + utm_band
+        return epsg_code
+    epsg_code = "327" + utm_band
+    return epsg_code
 
 
 def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoDataFrame):

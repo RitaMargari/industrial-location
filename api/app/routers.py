@@ -88,43 +88,41 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
     return result
 
 
-@router.get(
-    "/metrics/get_jhm_metric",
-    response_model=dict,
-    tags=[Tags.jhm_metric]
-)
+@router.get("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
-    global_crs = 4326
-    local_crs = 32636
 
-    company_location = Point(
-        pyproj.transform(
-            global_crs,
-            local_crs,
-            query_params.company_location_x,
-            query_params.company_location_y,
-        )
-    )
+    DEFAULT_ROOM_AREA = 35
+    DEFAULT_IF_FILTER_COEF = True
+    DEFAULT_IF_RETURN_JSON = False
+    DEFAULT_IF_DEBUG_MODE = True
+
+    room_area_m2 = DEFAULT_ROOM_AREA
+    filter_coef = query_params.filter_coef or DEFAULT_IF_FILTER_COEF
+    return_json = query_params.return_json or DEFAULT_IF_RETURN_JSON
+    debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
 
     graph_type = {
-        'public_transport': G_t,
+        "public_transport": G_t,
         "private_car": G_d,
     }
 
-    return JhmMetric.main(
-        G=graph_type[query_params.transportation_type],
-        house_prices=house_prices,
-        company_location=company_location,
-        salary=query_params.salary,
+    result = []
 
-        # TODO: constant value, change to some average value for rent price
-        room_area_m2=35,
+    for element in query_params.worker_and_salary:
+        result.append(
+            jhm_metric.main(
+                G=graph_type[query_params.transportation_type],
+                house_prices=house_prices,
+                company_location=query_params.company_location,
+                salary=element.salary,
+                # TODO: constant value, change to some average value for rent price
+                room_area_m2=room_area_m2,
 
-        # not for user params
-        filter_coef=query_params.filter_coef,
-        return_json=query_params.return_json,
-        debug_mode=query_params.debug_mode,
+                # debug params
+                filter_coef=filter_coef,
+                return_json=return_json,
+                debug_mode=debug_mode
+            )
+        )
 
-        # TODO: add a dict of cities and their local crs systems
-        local_crs=local_crs,
-    )
+    return {'len': len(result)}
