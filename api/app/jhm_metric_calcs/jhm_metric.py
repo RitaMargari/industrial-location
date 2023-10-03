@@ -4,7 +4,7 @@ import networkit as nk
 from app.jhm_metric_calcs import utils
 from shapely.geometry import Point
 
-# from geojson_pydantic import FeatureCollection
+from geojson_pydantic import FeatureCollection
 import numpy as np
 import pyproj
 import pandas as pd
@@ -47,7 +47,7 @@ def calc_coef(
     so the rent price woul be calculated by average rent price per meter.
     """
 
-    comfortable_accessibility_time = 15
+    comfortable_accessibility_time = 60
 
     # 10 is set here because at the next step it will be transformed to 1
     # which means we do not take accessibility time into account if workplace is close to home
@@ -55,27 +55,29 @@ def calc_coef(
     house_prices["dists"] = house_prices["dists"].apply(
         lambda x: log_base if x < comfortable_accessibility_time else x
     )
+    house_prices["log_dists"] = round(np.log10(house_prices[["dists"]]), 2)
 
-    house_prices["coef"] = house_prices["avg_m2_price_rent"] * room_area_m2 / salary
-    house_prices["log_dists"] = np.log10(house_prices[["dists"]])
-    house_prices["coef"] = house_prices["coef"] * house_prices["log_dists"]
-    house_prices = house_prices.loc[
-        :, ["coef", "avg_m2_price_rent", "log_dists", "geometry"]
-    ]
-    return house_prices
+    house_prices["avg_price_rent"] = house_prices["avg_m2_price_rent"] * room_area_m2
+    house_prices["avg_price_rent"] = house_prices["avg_price_rent"].round(0).astype(int)
+
+    house_prices["coef"] = house_prices["avg_price_rent"] / salary
+    house_prices["coef"] = round(house_prices["coef"] * house_prices["log_dists"], 2)
+
+    return house_prices.loc[:, ["coef", "avg_price_rent", "log_dists", "geometry"]]
 
 
 def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
     least_comfortable_coef_value = 0.7
     if filter:
+        print(f'AAA {filter} AA\n\n\n\n')
         res = res[res["coef"] <= least_comfortable_coef_value]
-    return res.to_dict(orient="records")
+    return res
 
 
 def fix_company_location_coords(company_location: list) -> Point:
     global_crs = 4326
-    lon = company_location['lon']
-    lat = company_location['lat']
+    lon = company_location["lon"]
+    lat = company_location["lat"]
     local_crs = utils.convert_wgs_to_utm(lon=lon, lat=lat)
     company_location = Point(pyproj.transform(global_crs, local_crs, lon, lat))
 
@@ -88,9 +90,9 @@ def main(
     company_location: dict,
     salary: int,
     room_area_m2: int,
-    filter_coef=True,
-    debug_mode=True,
-) -> dict:
+    filter_coef: bool,
+    # debug_mode=True,
+) -> FeatureCollection:
     company_location = fix_company_location_coords(company_location)
 
     res = (
@@ -107,5 +109,5 @@ def main(
     #     return out
 
     # else:
-    
+
     return res

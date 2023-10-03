@@ -14,6 +14,7 @@ from enum import auto
 from app import enums, schemas
 import networkx as nx
 from typing import Optional
+import statistics
 
 
 router = APIRouter()
@@ -91,37 +92,38 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
-
     DEFAULT_ROOM_AREA = 35
-    DEFAULT_IF_FILTER_COEF = True
-    DEFAULT_IF_DEBUG_MODE = True
+    # DEFAULT_IF_DEBUG_MODE = True
 
     room_area_m2 = DEFAULT_ROOM_AREA
-    filter_coef = query_params.filter_coef or DEFAULT_IF_FILTER_COEF
-    debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
+    filter_coef = query_params.filter_coef
+    # debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
 
     graph_type = {
         "public_transport": G_t,
         "private_car": G_d,
     }
 
-    result = []
+    result = {}
+    mean_coef = []
 
     for element in query_params.worker_and_salary:
-        result.append(
-            jhm_metric.main(
-                G=graph_type[query_params.transportation_type],
-                house_prices=house_prices,
-                company_location=query_params.company_location,
-                salary=element.salary,
-
-                # TODO: constant value, change to some average value for rent price
-                room_area_m2=room_area_m2,
-
-                # debug params
-                filter_coef=filter_coef,
-                debug_mode=debug_mode
-            )
+        coef_gdf = jhm_metric.main(
+            G=graph_type[query_params.transportation_type],
+            house_prices=house_prices,
+            company_location=query_params.company_location,
+            salary=element.salary,
+            # TODO: constant value, change to some average value for rent price
+            room_area_m2=room_area_m2,
+            # debug params
+            filter_coef=filter_coef,
+            # debug_mode=debug_mode
         )
+        
+        mean_coef.append(coef_gdf['coef'].mean())
+        
+        result[element.speciality] = coef_gdf.to_dict(orient="records")
 
-    return {'len': len(result)}
+        # .to_dict(orient="records")
+    
+    return {"mean_coef": statistics.mean(mean_coef), "res": str(result)}
