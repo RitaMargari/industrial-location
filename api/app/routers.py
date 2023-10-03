@@ -33,6 +33,8 @@ G_d = nx.read_graphml("app/data/G_drive.graphml")
 # G_t = nx.read_graphml("app/data/G_transport.graphml")
 G_t = None
 
+# provision_school = gpd
+
 
 class Tags(str, enums.AutoName):
     def _generate_next_value_(name, start, count, last_values):
@@ -105,25 +107,20 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
     }
 
     result = {}
-    mean_coef = []
+    mean_coef = {}
 
     for element in query_params.worker_and_salary:
-        coef_gdf = jhm_metric.main(
+        Iq_coef_worker = jhm_metric.main(
             G=graph_type[query_params.transportation_type],
             house_prices=house_prices,
             company_location=query_params.company_location,
             salary=element.salary,
             # TODO: constant value, change to some average value for rent price
             room_area_m2=room_area_m2,
-            # debug params
             filter_coef=filter_coef,
-            # debug_mode=debug_mode
         )
         
-        mean_coef.append(coef_gdf['coef'].mean())
-        
-        result[element.speciality] = coef_gdf.to_dict(orient="records")
-
-        # .to_dict(orient="records")
+        mean_coef[element.speciality] = Iq_coef_worker['Iq'].mean()
+        result[element.speciality] = Iq_coef_worker.to_dict(orient="records")
     
-    return {"mean_coef": statistics.mean(mean_coef), "res": str(result)}
+    return {"Iq": mean_coef, "res": str(result)}

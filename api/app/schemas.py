@@ -92,13 +92,11 @@ class Workers(BaseModel):
     speciality: str = "worker_1"
     salary: int = 75_000
 
-
 class JhmQueryParams(BaseModel):
 
     worker_and_salary: List[Workers]
     transportation_type: enums.Transportation
     company_location: Dict[str, float] = {"lat": 59.860510, "lon": 30.211518}
-    # debug_mode: Optional[bool] = True
     filter_coef: Optional[bool] = True
 
     class Config:

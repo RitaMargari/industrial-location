@@ -55,22 +55,21 @@ def calc_coef(
     house_prices["dists"] = house_prices["dists"].apply(
         lambda x: log_base if x < comfortable_accessibility_time else x
     )
+
     house_prices["log_dists"] = round(np.log10(house_prices[["dists"]]), 2)
+    house_prices["calculated_rent"] = house_prices["avg_m2_price_rent"] * room_area_m2
+    house_prices["calculated_rent"] = house_prices["calculated_rent"].round(0).astype(int)
 
-    house_prices["avg_price_rent"] = house_prices["avg_m2_price_rent"] * room_area_m2
-    house_prices["avg_price_rent"] = house_prices["avg_price_rent"].round(0).astype(int)
+    house_prices["Iq"] = house_prices["calculated_rent"] / salary
+    house_prices["Iq"] = round(house_prices["Iq"] * house_prices["log_dists"], 2)
 
-    house_prices["coef"] = house_prices["avg_price_rent"] / salary
-    house_prices["coef"] = round(house_prices["coef"] * house_prices["log_dists"], 2)
-
-    return house_prices.loc[:, ["coef", "avg_price_rent", "log_dists", "geometry"]]
+    return house_prices
 
 
 def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
     least_comfortable_coef_value = 0.7
     if filter:
-        print(f'AAA {filter} AA\n\n\n\n')
-        res = res[res["coef"] <= least_comfortable_coef_value]
+        res = res[res["Iq"] <= least_comfortable_coef_value]
     return res
 
 
@@ -83,6 +82,10 @@ def fix_company_location_coords(company_location: list) -> Point:
 
     return company_location
 
+def calc_avg_provision(house_prices):
+    p_columns = [col for col in house_prices.columns if 'P_' in col]
+    house_prices['P_avg'] = house_prices.loc[:, p_columns].mean(axis=1)
+    return house_prices
 
 def main(
     G: nx.DiGraph,
@@ -91,23 +94,14 @@ def main(
     salary: int,
     room_area_m2: int,
     filter_coef: bool,
-    # debug_mode=True,
 ) -> FeatureCollection:
     company_location = fix_company_location_coords(company_location)
 
     res = (
         get_distance_to_work(G, house_prices, company_location)
         .pipe(calc_coef, salary, room_area_m2)
+        .pipe(calc_avg_provision)
         .pipe(filter_final_coef, filter_coef)
     )
-
-    # if debug_mode:
-    #     # debug mode return histogram values since swager ui cant load whole geojson as an output
-    #     bins = 40
-    #     out = pd.cut(res["coef"], bins=bins, ordered=True).value_counts().to_dict()
-    #     out = {str(key): value for key, value in out.items()}
-    #     return out
-
-    # else:
 
     return res
