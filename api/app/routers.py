@@ -15,6 +15,7 @@ from app import enums, schemas
 import networkx as nx
 from typing import Optional
 import statistics
+from collections import defaultdict
 
 
 router = APIRouter()
@@ -104,21 +105,39 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
         "private_car": G_d,
     }
 
-    result = {}
-    mean_coef = {}
+    gdf_results = {}
+    mean_Iq_coef = {}
+    K1 = {}
+    K2 = defaultdict(list)
+    K3 = defaultdict(float)
+    p_columns = [col for col in gdf_houses.columns if 'P_' in col]
 
-    for element in query_params.worker_and_salary:
+    for worker in query_params.worker_and_salary:
         Iq_coef_worker = jhm_metric.main(
             G=graph_type[query_params.transportation_type],
             gdf_houses=gdf_houses,
             company_location=query_params.company_location,
-            salary=element.salary,
+            salary=worker.salary,
             # TODO: constant value, change to some average value for rent price
             room_area_m2=room_area_m2,
             filter_coef=filter_coef,
         )
         
-        mean_coef[element.speciality] = Iq_coef_worker['Iq'].mean()
-        result[element.speciality] = Iq_coef_worker.to_dict(orient="records")
+        mean_Iq_coef[worker.speciality] = Iq_coef_worker['Iq'].mean()
+        gdf_results[worker.speciality] = Iq_coef_worker
+
+        for col in p_columns:
+            Iq_coef_worker_tmp = Iq_coef_worker[Iq_coef_worker["Iq"] <= 0.7].copy()
+            K1[f'{col}_avg_{worker.speciality}'] = round(Iq_coef_worker_tmp.loc[:, col].mean(), 2)
+            K2[f'{col}_avg'].append(Iq_coef_worker_tmp.loc[:, col].mean())
     
-    return {"Iq": mean_coef, "res": str(result)}
+    for col in p_columns:
+        K2[f'{col}_avg'] = round(statistics.mean(K2[f'{col}_avg']), 2)
+        for worker in query_params.worker_and_salary:            
+            K3[f'{col}_{worker.speciality}'] = round(K1[f'{col}_avg_{worker.speciality}'] / K2[f'{col}_avg'], 2)
+
+    print('\n\n', K1, '\n\n', K2, '\n\n', K3, '\n\n')
+
+    # D = 
+    
+    return {"Iq": mean_Iq_coef, "res": str(gdf_results)}

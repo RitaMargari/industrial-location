@@ -20,9 +20,7 @@ def get_distance_to_work(
 
     G_nk = utils.convert_nx2nk(G_nx2, weight="time_min")
 
-    nodes_from_buildings = utils.get_nearest_nodes(graph_gdf, gdf_houses["geometry"])[
-        1
-    ]
+    nodes_from_buildings = utils.get_nearest_nodes(graph_gdf, gdf_houses["geometry"])[1]
     company_node = utils.get_nearest_nodes(graph_gdf, company_location)[1]
 
     nk_dists = nk.distance.SPSP(G=G_nk, sources=company_node).run()
@@ -79,17 +77,19 @@ def fix_company_location_coords(company_location: list) -> Point:
     lat = company_location["lat"]
     local_crs = utils.convert_wgs_to_utm(lon=lon, lat=lat)
     company_location = Point(pyproj.transform(global_crs, local_crs, lon, lat))
-
     return company_location
 
+
 def calc_avg_provision(gdf_houses):
-    p_columns = [col for col in gdf_houses.columns if 'P_' in col]
-    gdf_houses['P_avg'] = gdf_houses.loc[:, p_columns].mean(axis=1)
+    p_columns = [col for col in gdf_houses.columns if "P_" in col]
+    gdf_houses["P_avg"] = gdf_houses.loc[:, p_columns].mean(axis=1)
     return gdf_houses
 
+
 def calc_avg_coef(gdf_houses):
-    gdf_houses['Idx'] = gdf_houses[['P_avg', 'Iq']].mean(axis=1)
+    gdf_houses["Idx"] = gdf_houses[["P_avg", "Iq"]].mean(axis=1)
     return gdf_houses
+
 
 def main(
     G: nx.DiGraph,

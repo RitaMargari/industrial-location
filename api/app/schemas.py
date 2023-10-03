@@ -89,14 +89,14 @@ class EstimatesIn(BaseModel):
 
 
 class Workers(BaseModel):
-    speciality: str = "worker_1"
-    salary: int = 75_000
+    speciality: str
+    salary: int
 
 class JhmQueryParams(BaseModel):
 
     worker_and_salary: List[Workers]
     transportation_type: enums.Transportation
-    company_location: Dict[str, float] = {"lat": 59.860510, "lon": 30.211518}
+    company_location: Dict[str, float]
     filter_coef: Optional[bool] = True
 
     class Config:
