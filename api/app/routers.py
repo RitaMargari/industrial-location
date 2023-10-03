@@ -28,12 +28,10 @@ cities = gpd.read_file("app/data/cities.geojson", index_col=0).drop_duplicates(
     "city", keep=False
 )
 
-house_prices = gpd.read_parquet("app/data/houses_price_demo.parquet")
+gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_d = nx.read_graphml("app/data/G_drive.graphml")
 # G_t = nx.read_graphml("app/data/G_transport.graphml")
 G_t = None
-
-# provision_school = gpd
 
 
 class Tags(str, enums.AutoName):
@@ -112,7 +110,7 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
     for element in query_params.worker_and_salary:
         Iq_coef_worker = jhm_metric.main(
             G=graph_type[query_params.transportation_type],
-            house_prices=house_prices,
+            gdf_houses=gdf_houses,
             company_location=query_params.company_location,
             salary=element.salary,
             # TODO: constant value, change to some average value for rent price

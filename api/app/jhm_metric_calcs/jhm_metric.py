@@ -11,7 +11,7 @@ import pandas as pd
 
 
 def get_distance_to_work(
-    G: nx.DiGraph, house_prices: gpd.GeoDataFrame, company_location: Point
+    G: nx.DiGraph, gdf_houses: gpd.GeoDataFrame, company_location: Point
 ) -> gpd.GeoDataFrame:
     """
     Graph calcs
@@ -20,23 +20,23 @@ def get_distance_to_work(
 
     G_nk = utils.convert_nx2nk(G_nx2, weight="time_min")
 
-    nodes_from_buildings = utils.get_nearest_nodes(graph_gdf, house_prices["geometry"])[
+    nodes_from_buildings = utils.get_nearest_nodes(graph_gdf, gdf_houses["geometry"])[
         1
     ]
     company_node = utils.get_nearest_nodes(graph_gdf, company_location)[1]
 
     nk_dists = nk.distance.SPSP(G=G_nk, sources=company_node).run()
-    house_prices["dists"] = utils.get_nk_distances(
+    gdf_houses["dists"] = utils.get_nk_distances(
         nk_dists=nk_dists,
         source_nodes=nodes_from_buildings,
         target_node=company_node,
     )
 
-    return house_prices
+    return gdf_houses
 
 
 def calc_coef(
-    house_prices: gpd.GeoDataFrame, salary: int, room_area_m2: int
+    gdf_houses: gpd.GeoDataFrame, salary: int, room_area_m2: int
 ) -> gpd.GeoDataFrame:
     """
     Calculation of the coefficient (indicator) of job-housing
@@ -52,18 +52,18 @@ def calc_coef(
     # 10 is set here because at the next step it will be transformed to 1
     # which means we do not take accessibility time into account if workplace is close to home
     log_base = 10
-    house_prices["dists"] = house_prices["dists"].apply(
+    gdf_houses["dists"] = gdf_houses["dists"].apply(
         lambda x: log_base if x < comfortable_accessibility_time else x
     )
 
-    house_prices["log_dists"] = round(np.log10(house_prices[["dists"]]), 2)
-    house_prices["calculated_rent"] = house_prices["avg_m2_price_rent"] * room_area_m2
-    house_prices["calculated_rent"] = house_prices["calculated_rent"].round(0).astype(int)
+    gdf_houses["log_dists"] = round(np.log10(gdf_houses[["dists"]]), 2)
+    gdf_houses["calculated_rent"] = gdf_houses["avg_m2_price_rent"] * room_area_m2
+    gdf_houses["calculated_rent"] = gdf_houses["calculated_rent"].round(0).astype(int)
 
-    house_prices["Iq"] = house_prices["calculated_rent"] / salary
-    house_prices["Iq"] = round(house_prices["Iq"] * house_prices["log_dists"], 2)
+    gdf_houses["Iq"] = gdf_houses["calculated_rent"] / salary
+    gdf_houses["Iq"] = round(gdf_houses["Iq"] * gdf_houses["log_dists"], 2)
 
-    return house_prices
+    return gdf_houses
 
 
 def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
@@ -82,14 +82,18 @@ def fix_company_location_coords(company_location: list) -> Point:
 
     return company_location
 
-def calc_avg_provision(house_prices):
-    p_columns = [col for col in house_prices.columns if 'P_' in col]
-    house_prices['P_avg'] = house_prices.loc[:, p_columns].mean(axis=1)
-    return house_prices
+def calc_avg_provision(gdf_houses):
+    p_columns = [col for col in gdf_houses.columns if 'P_' in col]
+    gdf_houses['P_avg'] = gdf_houses.loc[:, p_columns].mean(axis=1)
+    return gdf_houses
+
+def calc_avg_coef(gdf_houses):
+    gdf_houses['Idx'] = gdf_houses[['P_avg', 'Iq']].mean(axis=1)
+    return gdf_houses
 
 def main(
     G: nx.DiGraph,
-    house_prices: gpd.GeoDataFrame,
+    gdf_houses: gpd.GeoDataFrame,
     company_location: dict,
     salary: int,
     room_area_m2: int,
@@ -98,9 +102,10 @@ def main(
     company_location = fix_company_location_coords(company_location)
 
     res = (
-        get_distance_to_work(G, house_prices, company_location)
+        get_distance_to_work(G, gdf_houses, company_location)
         .pipe(calc_coef, salary, room_area_m2)
         .pipe(calc_avg_provision)
+        .pipe(calc_avg_coef)
         .pipe(filter_final_coef, filter_coef)
     )
 
