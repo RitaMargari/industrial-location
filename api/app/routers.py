@@ -115,12 +115,15 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
     K2 = defaultdict(float)  # avg P_{provision_service}
 
     K3 = defaultdict(
-        list
+        lambda: defaultdict(float)
     )  # avg estimation on total workers' comfortability regarding to the enterprise location
+    # K3_1 = defaultdict(list)
     K4 = defaultdict(float)
     K5: float = 0
 
     provision_columns = [col for col in gdf_houses.columns if "P_" in col]
+    for col in provision_columns:
+        K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
 
     for worker in query_params.worker_and_salary:
         Iq_coef_worker = jhm_metric.main(
@@ -142,31 +145,31 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
             Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
             P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
             K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
-            K3[f"{col}"].append(P_mean_val)
+            K3[worker.speciality][f"{col}_K"] = (
+                K1[worker.speciality][f"{col}_avg"] / K2[f"{col}_avg_all_houses"]
+            )
+            # K3[f"{col}"].append(P_mean_val)
+        K4[f"{worker.speciality}_avg"] = np.mean(
+            [val for inner_dict in K3.values() for val in inner_dict.values()]
+        )
 
-    
+    all_K = [val for val in K4.values()]
+    K = np.mean(all_K)
+    D = np.max(all_K) / np.median(all_K)
 
-    for col in provision_columns:
-        K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
-        K3[f"{col}"] = round(np.mean(K3[f"{col}"]), 2)
-        K4[f"{col}"] = K3[f"{col}"] / K2[f"{col}_avg_all_houses"]
-    
-    conditions = [
-    (K5 >= 1),
-    (K5 > 0.7) & (K5 < 1),
-    (K5 <= 0.7)
-    ]
+    conditions = [(K >= 1), (K > 0.7) & (K < 1), (K <= 0.7)]
+    values = ["green", "orange", "red"]
 
-    values = ['green', 'orange', 'red']
-    
-    K5 = np.mean(list(K4.values()))
-    K6 = np.select(conditions, values)
+    K_color = np.select(conditions, values)
 
-    print("\n\n K1:", K1, 
-          "\n\n K2:", K2, 
-          "\n\n K3:", K3, 
-          "\n\n K4:", K4, 
-          "\n\n K5:", K5, 
-          "\n\n K6:", K6,)
+    print(
+        "\n\n K:",
+        K,
+        "\n\n D:",
+        D,
+        "\n\n K_color:",
+        K_color,
+        "\n",
+    )
 
     return {"Iq": mean_Iq_coef, "res": str(gdf_results)}
