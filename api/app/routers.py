@@ -14,8 +14,8 @@ from enum import auto
 from app import enums, schemas
 import networkx as nx
 from typing import Optional
-import statistics
 from collections import defaultdict
+import numpy as np
 
 
 router = APIRouter()
@@ -92,12 +92,12 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
-def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
+def get_jhm_metric(query_params: schemas.JhmQueryParams):
     DEFAULT_ROOM_AREA = 35
-    # DEFAULT_IF_DEBUG_MODE = True
+    LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.7
 
-    room_area_m2 = DEFAULT_ROOM_AREA
-    filter_coef = query_params.filter_coef
+    # filter_coef = query_params.filter_coef
+    # DEFAULT_IF_DEBUG_MODE = True
     # debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
 
     graph_type = {
@@ -105,12 +105,22 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
         "private_car": G_d,
     }
 
-    gdf_results = {}
-    mean_Iq_coef = {}
-    K1 = {}
-    K2 = defaultdict(list)
-    K3 = defaultdict(float)
-    p_columns = [col for col in gdf_houses.columns if 'P_' in col]
+    gdf_results = defaultdict(
+        gpd.GeoDataFrame
+    )  # gdf with calculated coef for each house for each specified worker
+    mean_Iq_coef = defaultdict(float)  #
+    K1 = defaultdict(
+        lambda: defaultdict(float)
+    )  # avg P_{provision_service} in the nearest comfortable area
+    K2 = defaultdict(float)  # avg P_{provision_service}
+
+    K3 = defaultdict(
+        list
+    )  # avg estimation on total workers' comfortability regarding to the enterprise location
+    K4 = defaultdict(float)
+    K5: float = 0
+
+    provision_columns = [col for col in gdf_houses.columns if "P_" in col]
 
     for worker in query_params.worker_and_salary:
         Iq_coef_worker = jhm_metric.main(
@@ -119,25 +129,44 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams = Depends()):
             company_location=query_params.company_location,
             salary=worker.salary,
             # TODO: constant value, change to some average value for rent price
-            room_area_m2=room_area_m2,
-            filter_coef=filter_coef,
+            room_area_m2=DEFAULT_ROOM_AREA,
+            # filter_coef=filter_coef,
         )
-        
-        mean_Iq_coef[worker.speciality] = Iq_coef_worker['Iq'].mean()
+
         gdf_results[worker.speciality] = Iq_coef_worker
+        mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
 
-        for col in p_columns:
-            Iq_coef_worker_tmp = Iq_coef_worker[Iq_coef_worker["Iq"] <= 0.7].copy()
-            K1[f'{col}_avg_{worker.speciality}'] = round(Iq_coef_worker_tmp.loc[:, col].mean(), 2)
-            K2[f'{col}_avg'].append(Iq_coef_worker_tmp.loc[:, col].mean())
+        for col in provision_columns:
+            mask = Iq_coef_worker["Iq"] <= LEAST_COMFORTABLE_IQ_COEF_VALUE
+
+            Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
+            P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
+            K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
+            K3[f"{col}"].append(P_mean_val)
+
     
-    for col in p_columns:
-        K2[f'{col}_avg'] = round(statistics.mean(K2[f'{col}_avg']), 2)
-        for worker in query_params.worker_and_salary:            
-            K3[f'{col}_{worker.speciality}'] = round(K1[f'{col}_avg_{worker.speciality}'] / K2[f'{col}_avg'], 2)
 
-    print('\n\n', K1, '\n\n', K2, '\n\n', K3, '\n\n')
-
-    # D = 
+    for col in provision_columns:
+        K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
+        K3[f"{col}"] = round(np.mean(K3[f"{col}"]), 2)
+        K4[f"{col}"] = K3[f"{col}"] / K2[f"{col}_avg_all_houses"]
     
+    conditions = [
+    (K5 >= 1),
+    (K5 > 0.7) & (K5 < 1),
+    (K5 <= 0.7)
+    ]
+
+    values = ['green', 'orange', 'red']
+    
+    K5 = np.mean(list(K4.values()))
+    K6 = np.select(conditions, values)
+
+    print("\n\n K1:", K1, 
+          "\n\n K2:", K2, 
+          "\n\n K3:", K3, 
+          "\n\n K4:", K4, 
+          "\n\n K5:", K5, 
+          "\n\n K6:", K6,)
+
     return {"Iq": mean_Iq_coef, "res": str(gdf_results)}

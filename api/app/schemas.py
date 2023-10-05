@@ -55,7 +55,7 @@ class EstimatesIn(BaseModel):
                 raise ValueError(
                     f"With workforce_type == '{workforce_type}' edu_groups can't be None"
                 )
-
+            
             specialists_state = (
                 workforce_type == "all" or workforce_type == "specialists"
             )
@@ -100,14 +100,14 @@ class JhmQueryParams(BaseModel):
     filter_coef: Optional[bool] = True
 
     class Config:
-        arbitrary_types_allowed = True
+        # arbitrary_types_allowed = True
 
         schema_extra = {
-            "example": [
+            "example": 
                 {
                     "company_location": {"lat": 59.860510, "lon": 30.211518},
                     "transportation_type": "private_car",
-                    "worker_and_salary": [{"speciality": "worker_2", "salary": 70000}],
+                    "worker_and_salary": [{"speciality": "worker_1", "salary": 45000}, {"speciality": "worker_2", "salary": 70000}],
                 }
-            ]
+            
         }

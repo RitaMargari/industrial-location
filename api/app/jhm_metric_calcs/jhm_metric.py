@@ -64,11 +64,11 @@ def calc_coef(
     return gdf_houses
 
 
-def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
-    least_comfortable_coef_value = 0.7
-    if filter:
-        res = res[res["Iq"] <= least_comfortable_coef_value]
-    return res
+# def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
+#     least_comfortable_coef_value = 0.7
+#     if filter:
+#         res = res[res["Iq"] <= least_comfortable_coef_value]
+#     return res
 
 
 def fix_company_location_coords(company_location: list) -> Point:
@@ -97,7 +97,6 @@ def main(
     company_location: dict,
     salary: int,
     room_area_m2: int,
-    filter_coef: bool,
 ) -> FeatureCollection:
     company_location = fix_company_location_coords(company_location)
 
@@ -106,7 +105,7 @@ def main(
         .pipe(calc_coef, salary, room_area_m2)
         .pipe(calc_avg_provision)
         .pipe(calc_avg_coef)
-        .pipe(filter_final_coef, filter_coef)
+        # .pipe(filter_final_coef, filter_coef)
     )
 
     return res
