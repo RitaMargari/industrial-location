@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 import json
 
 from typing import Optional
 from sklearn.preprocessing import MinMaxScaler
 from pandas.core.frame import DataFrame
+from shapely.geometry import LineString
 
 
 '''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
@@ -40,9 +42,9 @@ Returns geojson containing the estimates that reflect the potential of industry 
         specialities (dict) - specifies specialisties ids (as keys) and their weights (as values)
         edu_groups (dict) - specifies edu groups ids (as keys) and their weights (as values)
 '''
-def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataFrame, cities: DataFrame, 
-                            workforce_type: str = 'all', specialities: Optional[dict] = None, 
-                            edu_groups: Optional[dict] = None, raw_data=False):
+def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataFrame, cities: DataFrame,
+                            responses: DataFrame, workforce_type: str = 'all', specialities: Optional[dict] = None, 
+                            edu_groups: Optional[dict] = None, links_output:bool=False):
 
     for var, var_name in zip([specialities, edu_groups], ["specialities", "edu_groups"]):
         if var is None: break
@@ -57,7 +59,7 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
         raise ValueError(f"The workforce type '{workforce_type}'' is not supported.")
 
     all_specialities = ontology.set_index("speciality_id")["speciality"].drop_duplicates()
-    all_edu_groups = ontology.set_index("edu_group_id")[["type", "edu_group_code"]].drop_duplicates()
+    all_edu_groups = ontology.set_index("edu_group_id")[["type", "edu_group_code", "edu_group"]].drop_duplicates()
 
     cities = cities.set_index("region_city")
     cities["estimate"] = 0
@@ -71,7 +73,7 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
             fail_ids = [x for x in edu_groups.keys() if x not in all_edu_groups.index]
             raise ValueError(f"Educational groups' ids {fail_ids} don't present in the current ontology")
 
-        edu_groups = all_edu_groups.loc[edu_groups.keys()].join(pd.Series(edu_groups).rename("weights"))
+        edu_groups = pd.concat((all_edu_groups.loc[edu_groups.keys()], pd.Series(edu_groups).rename("weights")), axis=1)
         edu_groups = edu_groups.set_index(["type", "edu_group_code"])
         cities = estimate_graduates(graduates, cities, edu_groups)
 
@@ -97,13 +99,16 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
             index=cities.index
             )
     
+    links_json = get_links(cities, responses, all_specialities) if links_output else None
+        
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
     cities = cities.reset_index().reindex([
         "region", "city", "region_city", "population", "estimate", "graduates_forecast_number", 
         "graduates_forecast_sum_number", "specialists_number", "specialists_sum_number", "geometry"
         ], axis=1)
-    return  json.loads(cities.to_json())
+        
+    return  {"estimates": json.loads(cities.to_json()), "links": links_json}
 
 
 '''
@@ -114,13 +119,16 @@ def estimate_graduates(graduates: DataFrame, cities: DataFrame, edu_groups: Data
             
         graduates = pd.DataFrame(graduates.groupby(["region_city", "type", "edu_group_code"])["graduates_forecast"].sum())
         graduates = graduates.join(edu_groups, on=["type", "edu_group_code"]).dropna(subset=["weights"])
+        graduates = graduates.reset_index().set_index(["region_city", "edu_group"])
         graduates["graduates_weighted"] = graduates["graduates_forecast"] * graduates["weights"]
 
         graduates_cities_gr = graduates.groupby(["region_city"])
         graduates_cities = graduates_cities_gr[["graduates_forecast", "graduates_weighted"]].sum().add_suffix("_sum")
+
         graduates_cities["graduates_forecast"] = graduates_cities_gr.apply(
             lambda x: x["graduates_forecast"].droplevel("region_city").to_dict()
             )
+
         graduates_cities["graduates_forecast"] = graduates_cities["graduates_forecast"].apply(lambda x: str(x) if x else x)
 
         scaler = MinMaxScaler()
@@ -146,21 +154,22 @@ based on the information about open CVs
 '''
 def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
 
-    cv_select = cv[cv["hh_names"].isin(specialities["speciality"])]
+    cv_select = cv[cv["year"] == 2021]
+    cv_select = cv_select[cv_select["hh_name"].isin(specialities["speciality"])]
     if len(cv_select) == 0:
         cities["specialists_sum_number"] = 0
         cities["specialists_number"] = None
         cities["estimate"] = cities["estimate"].add(0).fillna(cities["estimate"]).dropna()
         return cities
 
-    cv_select = cv_select.groupby(["region_city", "hh_names"])["id_cv"].count().rename("cv_count").reset_index()
-    cv_select = cv_select.join(specialities.set_index("speciality")["weights"], on="hh_names")
+    cv_select = cv_select.groupby(["region_city", "hh_name"])["id_cv"].count().rename("cv_count").reset_index()
+    cv_select = cv_select.join(specialities.set_index("speciality")["weights"], on="hh_name")
     cv_select["cv_count_weighted"] = cv_select["cv_count"] * cv_select["weights"]
 
     cv_cities_gr = cv_select.groupby(["region_city"])
     cv_cities = cv_cities_gr[["cv_count", "cv_count_weighted"]].sum().add_suffix("_sum")
-    cv_cities["cv_count"] = cv_cities_gr[["hh_names", "cv_count"]].apply(
-        lambda x: x.set_index("hh_names")["cv_count"].to_dict()
+    cv_cities["cv_count"] = cv_cities_gr[["hh_name", "cv_count"]].apply(
+        lambda x: x.set_index("hh_name")["cv_count"].to_dict()
         )
     cv_cities["cv_count"] = cv_cities["cv_count"].apply(lambda x: str(x) if x else x)
 
@@ -177,3 +186,23 @@ def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
     cities = cities.fillna({"specialists_sum_number": 0})
 
     return cities
+
+'''
+Returns FeatureCollection that contains the number of responses of job seekers from city_source 
+to a job vacancies from city_destination 
+'''
+def get_links(cities, responses, all_specialities):
+
+    responses_year = responses[responses["year"] == 2021]
+    responses_match = responses_year[responses_year["hh_name"].isin(all_specialities)]
+    links = responses_match.groupby(["cluster_center_cv", "cluster_center_vacancy"])["year"].count()
+    links = links.rename("num_responses").reset_index()
+    links = links.rename(columns={"cluster_center_cv": "city_source", "cluster_center_vacancy": "city_destination"})
+    links = links[links["city_source"] != links["city_destination"]]
+    links = links[links["num_responses"] >= links["num_responses"].quantile(0.95)]
+    links["geometry"] = links.apply(
+        lambda x: LineString((cities.loc[x.city_source]["geometry"], cities.loc[x.city_destination]["geometry"])), 
+        axis=1)
+    links = gpd.GeoDataFrame(links).sort_values(by=["num_responses"], ascending=False)
+
+    return json.loads(links.to_json())
