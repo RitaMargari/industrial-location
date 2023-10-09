@@ -16,10 +16,11 @@ router = APIRouter()
 faulthandler.enable()
 
 ontology = pd.read_csv("app/data/ontology.csv", index_col=0)
-cv = pd.read_csv("app/data/cv.csv", index_col=0)
 graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
 cities = gpd.read_file("app/data/cities.geojson", index_col=0)
-responses = pd.read_csv("app/data/responses.csv", index_col=0)
+vacancy = pd.read_parquet("app/data/vacancy.gzip")
+responses = pd.read_parquet("app/data/responses.gzip")
+cv = pd.read_parquet("app/data/cv.gzip")
 
 
 class Tags(str, enums.AutoName):
@@ -67,7 +68,7 @@ def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends(
 )
 def get_potential_estimates(query_params: schemas.EstimatesIn):
     result = func.get_potential_estimates(
-        ontology=ontology, cv=cv, graduates=graduates, cities=cities, responses=responses, 
+        ontology=ontology, cv=cv, graduates=graduates, cities=cities, responses=responses, vacancy=vacancy,
         workforce_type = query_params.workforce_type, specialities=query_params.specialities, 
         edu_groups=query_params.edu_groups, links_output=query_params.links_output
         )
