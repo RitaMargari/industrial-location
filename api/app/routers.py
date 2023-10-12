@@ -2,7 +2,7 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
-from app.jhm_metric_calcs import calc_final_results
+from app.jhm_metric_calcs import main
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -95,7 +95,7 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         "private_car": G_d,
     }
 
-    return calc_final_results(
+    return main(
         gdf_houses,
         query_params.worker_and_salary,
         graph_type[query_params.transportation_type],

@@ -3,6 +3,8 @@ import pandas as pd
 import geopandas as gpd
 import networkx as nx
 import math
+import shapely
+import numpy as np
 
 
 def get_nx2_nk_idmap(G_nx):
@@ -79,14 +81,13 @@ def fix_crs(gdf):
     return gdf
 
 def G_to_gdf(G: nx.DiGraph):
-    # global_crs = 4326
-    local_crs = 32636
+    graph_crs = G.graph['crs']
 
     graph_df = pd.DataFrame.from_dict(dict(G.nodes(data=True)), orient="index")
     graph_gdf = gpd.GeoDataFrame(
         graph_df,
         geometry=gpd.points_from_xy(graph_df["x"], graph_df["y"]),
-        crs=local_crs
+        crs=graph_crs
     )
 
     graph_gdf = fix_crs(graph_gdf)
@@ -97,7 +98,7 @@ def G_to_gdf(G: nx.DiGraph):
     graph_gdf2 = gpd.GeoDataFrame(
         graph_df2,
         geometry=gpd.points_from_xy(graph_df2["x"], graph_df2["y"]),
-        crs=local_crs,
+        crs=graph_crs,
     )
 
     graph_gdf2 = fix_crs(graph_gdf2)
@@ -116,7 +117,37 @@ def convert_wgs_to_utm(lon: float, lat: float):
     return epsg_code
 
 
-def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoDataFrame):
+def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoSeries):
     return graph_gdf["geometry"].sindex.nearest(
         locations, return_distance=False, return_all=False
     )
+
+def _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean",dropna=True):
+    merged = gpd.sjoin(gdf, grid, how='left', op='within')
+    merged[f'{col}_{aggfunc}']=1
+    dissolve = merged.dissolve(by="index_right", aggfunc=aggfunc)
+    grid.loc[dissolve.index, f'{col}_{aggfunc}'] = dissolve[col].values
+    if dropna:
+        grid.dropna(inplace=True)
+    return grid
+
+
+def create_grid(gdf, n_cells=30):
+    xmin, ymin, xmax, ymax= gdf.total_bounds
+    # how many cells across and down
+    cell_size = (xmax-xmin)/n_cells
+    # projection of the grid
+    crs = gdf.crs
+    # create the cells in a loop
+    grid_cells = []
+    for x0 in np.arange(xmin, xmax+cell_size, cell_size ):
+        for y0 in np.arange(ymin, ymax+cell_size, cell_size):
+            # bounds
+            x1 = x0-cell_size
+            y1 = y0+cell_size
+            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1)  )
+    grid = gpd.GeoDataFrame(grid_cells, columns=['geometry'], 
+                                    crs=crs)
+    
+    grid = _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean", dropna=True)
+    return grid

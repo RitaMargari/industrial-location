@@ -22,10 +22,11 @@ def get_distance_to_work(
     G_nk = utils.convert_nx2nk(G_nx2, weight="time_min")
 
     nodes_from_buildings = utils.get_nearest_nodes(graph_gdf, gdf_houses["geometry"])[1]
+    
     company_node = utils.get_nearest_nodes(graph_gdf, company_location)[1]
 
     nk_dists = nk.distance.SPSP(G=G_nk, sources=company_node).run()
-    gdf_houses["dists"] = utils.get_nk_distances(
+    gdf_houses["accs_time"] = utils.get_nk_distances(
         nk_dists=nk_dists,
         source_nodes=nodes_from_buildings,
         target_node=company_node,
@@ -34,9 +35,7 @@ def get_distance_to_work(
     return gdf_houses
 
 
-def calc_coef(
-    gdf_houses: gpd.GeoDataFrame, salary: int, room_area_m2: int
-) -> gpd.GeoDataFrame:
+def calc_coef(gdf_houses: gpd.GeoDataFrame, salary: int) -> gpd.GeoDataFrame:
     """
     Calculation of the coefficient (indicator) of job-housing
     spatial mismatch which is represented by the worker's salary,
@@ -46,31 +45,38 @@ def calc_coef(
     so the rent price woul be calculated by average rent price per meter.
     """
 
-    comfortable_accessibility_time = 60
+    MOST_COMFORTABLE_ACCS_TIME = 15
+    LEAST_COMFORTABLE_ACCS_TIME = 90
 
     # 10 is set here because at the next step it will be transformed to 1
     # which means we do not take accessibility time into account if workplace is close to home
     log_base = 10
-    gdf_houses["dists"] = gdf_houses["dists"].apply(
-        lambda x: log_base if x < comfortable_accessibility_time else x
+    gdf_houses["accs_time"] = gdf_houses["accs_time"].apply(
+        lambda x: log_base if x < MOST_COMFORTABLE_ACCS_TIME else x
     )
 
-    gdf_houses["log_dists"] = round(np.log10(gdf_houses[["dists"]]), 2)
-    gdf_houses["calculated_rent"] = gdf_houses["avg_m2_price_rent"] * room_area_m2
-    gdf_houses["calculated_rent"] = gdf_houses["calculated_rent"].round(0).astype(int)
+    gdf_houses["log_accs_time"] = (np.log10(gdf_houses[["accs_time"]])).round(2)
+    gdf_houses["mean_price_rent"] = gdf_houses["mean_price_rent"].round(0)
+    gdf_houses["Iq"] = (gdf_houses["mean_price_rent"] / salary).round(2)
+    gdf_houses["Iq"] = (gdf_houses["Iq"] * gdf_houses["log_accs_time"]).round(2)
+    gdf_houses["Iq"] = gdf_houses["Iq"].apply(lambda x: x if x <= 1 else 1)
 
-    gdf_houses["Iq"] = gdf_houses["calculated_rent"] / salary
-    gdf_houses["Iq"] = round(gdf_houses["Iq"] * gdf_houses["log_dists"], 2)
+    gdf_houses["Iq"] = gdf_houses[["Iq", "accs_time"]].apply(
+        lambda x: x["Iq"] if x["accs_time"] <= LEAST_COMFORTABLE_ACCS_TIME else 1,
+        axis=1,
+    )
 
     return gdf_houses
 
 
-def fix_company_location_coords(company_location: list) -> Point:
+def fix_company_location_coords(company_location: dict) -> Point:
     global_crs = 4326
     lon = company_location["lon"]
     lat = company_location["lat"]
-    local_crs = utils.convert_wgs_to_utm(lon=lon, lat=lat)
-    company_location = Point(pyproj.transform(global_crs, local_crs, lon, lat))
+    company_location = Point([lon, lat])
+    local_crs = utils.convert_wgs_to_utm(lon=company_location.y, lat=company_location.x)
+    company_location = gpd.GeoSeries(Point(company_location.y, company_location.x), crs=global_crs).to_crs(local_crs)
+
     return company_location
 
 
@@ -81,7 +87,10 @@ def calc_avg_provision(gdf_houses):
 
 
 def calc_avg_coef(gdf_houses):
-    gdf_houses["Idx"] = gdf_houses[["P_avg", "Iq"]].mean(axis=1)
+    gdf_houses["Iq"] = 1 - gdf_houses["Iq"]
+    gdf_houses["Idx"] = gdf_houses[["P_avg", "Iq"]].apply(
+        lambda x: x.mean() if x["Iq"] > 0.3 else 0, axis=1
+    )
     return gdf_houses
 
 
@@ -90,28 +99,28 @@ def calc_jhm_main(
     gdf_houses: gpd.GeoDataFrame,
     company_location: dict,
     salary: int,
-    room_area_m2: int,
 ) -> FeatureCollection:
     company_location = fix_company_location_coords(company_location)
 
     res = (
         get_distance_to_work(G, gdf_houses, company_location)
-        .pipe(calc_coef, salary, room_area_m2)
+        .pipe(calc_coef, salary)
         .pipe(calc_avg_provision)
         .pipe(calc_avg_coef)
     )
 
+    res["geometry"] = res["geometry"].representative_point()
+
     return res
 
 
-def calc_final_results(gdf_houses, worker_and_salary, graph, company_location):
-    DEFAULT_ROOM_AREA = 35
-    LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.7
+def main(gdf_houses, worker_and_salary, graph, company_location):
+    LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.3
 
-    gdf_results = defaultdict(
+    gdfs_results = defaultdict(
         gpd.GeoDataFrame
     )  # gdf with calculated coef for each house for each specified worker
-    mean_Iq_coef = defaultdict(float)  #
+    # mean_Iq_coef = defaultdict(float)  #
     K1 = defaultdict(
         lambda: defaultdict(float)
     )  # avg P_{provision_service} in the nearest comfortable area
@@ -127,21 +136,21 @@ def calc_final_results(gdf_houses, worker_and_salary, graph, company_location):
         K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
 
     for worker in worker_and_salary:
-        Iq_coef_worker = calc_jhm_main.main(
+        Iq_coef_worker = calc_jhm_main(
             G=graph,
             gdf_houses=gdf_houses,
             company_location=company_location,
             salary=worker.salary,
-            room_area_m2=DEFAULT_ROOM_AREA,
         )
 
-        gdf_results[worker.speciality] = Iq_coef_worker
-        mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
+        gdfs_results[worker.speciality] = Iq_coef_worker.copy()
+        gdfs_results[worker.speciality] = utils.create_grid(gdfs_results.get(worker.speciality))
+
+        # mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
+        mask = Iq_coef_worker["Iq"] >= LEAST_COMFORTABLE_IQ_COEF_VALUE
+        Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
 
         for col in provision_columns:
-            mask = Iq_coef_worker["Iq"] <= LEAST_COMFORTABLE_IQ_COEF_VALUE
-
-            Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
             P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
             K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
             K3[worker.speciality][f"{col}_K"] = (
@@ -171,4 +180,4 @@ def calc_final_results(gdf_houses, worker_and_salary, graph, company_location):
         "\n",
     )
 
-    return {"K": K, "D": D, "K_color": K_color, "gdfs": gdf_results}
+    return {"K": K, "D": D, "K_color": K_color, "gdfs": gdfs_results}
