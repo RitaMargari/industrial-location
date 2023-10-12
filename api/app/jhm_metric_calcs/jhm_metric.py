@@ -5,6 +5,7 @@ from app.jhm_metric_calcs import utils
 from shapely.geometry import Point
 
 from geojson_pydantic import FeatureCollection
+from collections import defaultdict
 import numpy as np
 import pyproj
 import pandas as pd
@@ -64,13 +65,6 @@ def calc_coef(
     return gdf_houses
 
 
-# def filter_final_coef(res: gpd.GeoDataFrame, filter: bool) -> gpd.GeoDataFrame:
-#     least_comfortable_coef_value = 0.7
-#     if filter:
-#         res = res[res["Iq"] <= least_comfortable_coef_value]
-#     return res
-
-
 def fix_company_location_coords(company_location: list) -> Point:
     global_crs = 4326
     lon = company_location["lon"]
@@ -91,7 +85,7 @@ def calc_avg_coef(gdf_houses):
     return gdf_houses
 
 
-def main(
+def calc_jhm_main(
     G: nx.DiGraph,
     gdf_houses: gpd.GeoDataFrame,
     company_location: dict,
@@ -105,7 +99,76 @@ def main(
         .pipe(calc_coef, salary, room_area_m2)
         .pipe(calc_avg_provision)
         .pipe(calc_avg_coef)
-        # .pipe(filter_final_coef, filter_coef)
     )
 
     return res
+
+
+def calc_final_results(gdf_houses, worker_and_salary, graph, company_location):
+    DEFAULT_ROOM_AREA = 35
+    LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.7
+
+    gdf_results = defaultdict(
+        gpd.GeoDataFrame
+    )  # gdf with calculated coef for each house for each specified worker
+    mean_Iq_coef = defaultdict(float)  #
+    K1 = defaultdict(
+        lambda: defaultdict(float)
+    )  # avg P_{provision_service} in the nearest comfortable area
+    K2 = defaultdict(float)  # avg P_{provision_service}
+
+    K3 = defaultdict(
+        lambda: defaultdict(float)
+    )  # avg estimation on total workers' comfortability regarding to the enterprise location
+    K4 = defaultdict(float)
+
+    provision_columns = [col for col in gdf_houses.columns if "P_" in col]
+    for col in provision_columns:
+        K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
+
+    for worker in worker_and_salary:
+        Iq_coef_worker = calc_jhm_main.main(
+            G=graph,
+            gdf_houses=gdf_houses,
+            company_location=company_location,
+            salary=worker.salary,
+            room_area_m2=DEFAULT_ROOM_AREA,
+        )
+
+        gdf_results[worker.speciality] = Iq_coef_worker
+        mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
+
+        for col in provision_columns:
+            mask = Iq_coef_worker["Iq"] <= LEAST_COMFORTABLE_IQ_COEF_VALUE
+
+            Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
+            P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
+            K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
+            K3[worker.speciality][f"{col}_K"] = (
+                K1[worker.speciality][f"{col}_avg"] / K2[f"{col}_avg_all_houses"]
+            )
+
+        K4[f"{worker.speciality}_avg"] = np.mean(
+            [val for inner_dict in K3.values() for val in inner_dict.values()]
+        )
+
+    all_K = [val for val in K4.values()]
+    K = np.mean(all_K)
+    D = np.max(all_K) / np.median(all_K)
+
+    conditions = [(K >= 1), (K > 0.7) & (K < 1), (K <= 0.7)]
+    values = ["green", "orange", "red"]
+
+    K_color = np.select(conditions, values)
+
+    print(
+        "\n\n K:",
+        K,
+        "\n\n D:",
+        D,
+        "\n\n K_color:",
+        K_color,
+        "\n",
+    )
+
+    return {"K": K, "D": D, "K_color": K_color, "gdfs": gdf_results}

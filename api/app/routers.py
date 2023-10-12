@@ -2,9 +2,7 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
-from shapely.geometry import Point
-import pyproj
-from app.jhm_metric_calcs import jhm_metric
+from app.jhm_metric_calcs import calc_final_results
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -13,7 +11,6 @@ from geojson_pydantic import FeatureCollection
 from enum import auto
 from app import enums, schemas
 import networkx as nx
-from typing import Optional
 from collections import defaultdict
 import numpy as np
 
@@ -93,83 +90,14 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
-    DEFAULT_ROOM_AREA = 35
-    LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.7
-
-    # filter_coef = query_params.filter_coef
-    # DEFAULT_IF_DEBUG_MODE = True
-    # debug_mode = query_params.debug_mode or DEFAULT_IF_DEBUG_MODE
-
     graph_type = {
         "public_transport": G_t,
         "private_car": G_d,
     }
 
-    gdf_results = defaultdict(
-        gpd.GeoDataFrame
-    )  # gdf with calculated coef for each house for each specified worker
-    mean_Iq_coef = defaultdict(float)  #
-    K1 = defaultdict(
-        lambda: defaultdict(float)
-    )  # avg P_{provision_service} in the nearest comfortable area
-    K2 = defaultdict(float)  # avg P_{provision_service}
-
-    K3 = defaultdict(
-        lambda: defaultdict(float)
-    )  # avg estimation on total workers' comfortability regarding to the enterprise location
-    # K3_1 = defaultdict(list)
-    K4 = defaultdict(float)
-    K5: float = 0
-
-    provision_columns = [col for col in gdf_houses.columns if "P_" in col]
-    for col in provision_columns:
-        K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
-
-    for worker in query_params.worker_and_salary:
-        Iq_coef_worker = jhm_metric.main(
-            G=graph_type[query_params.transportation_type],
-            gdf_houses=gdf_houses,
-            company_location=query_params.company_location,
-            salary=worker.salary,
-            # TODO: constant value, change to some average value for rent price
-            room_area_m2=DEFAULT_ROOM_AREA,
-            # filter_coef=filter_coef,
-        )
-
-        gdf_results[worker.speciality] = Iq_coef_worker
-        mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
-
-        for col in provision_columns:
-            mask = Iq_coef_worker["Iq"] <= LEAST_COMFORTABLE_IQ_COEF_VALUE
-
-            Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
-            P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
-            K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
-            K3[worker.speciality][f"{col}_K"] = (
-                K1[worker.speciality][f"{col}_avg"] / K2[f"{col}_avg_all_houses"]
-            )
-            # K3[f"{col}"].append(P_mean_val)
-        K4[f"{worker.speciality}_avg"] = np.mean(
-            [val for inner_dict in K3.values() for val in inner_dict.values()]
-        )
-
-    all_K = [val for val in K4.values()]
-    K = np.mean(all_K)
-    D = np.max(all_K) / np.median(all_K)
-
-    conditions = [(K >= 1), (K > 0.7) & (K < 1), (K <= 0.7)]
-    values = ["green", "orange", "red"]
-
-    K_color = np.select(conditions, values)
-
-    print(
-        "\n\n K:",
-        K,
-        "\n\n D:",
-        D,
-        "\n\n K_color:",
-        K_color,
-        "\n",
+    return calc_final_results(
+        gdf_houses,
+        query_params.worker_and_salary,
+        graph_type[query_params.transportation_type],
+        query_params.company_location,
     )
-
-    return {"Iq": mean_Iq_coef, "res": str(gdf_results)}
