@@ -1,14 +1,14 @@
 import geopandas as gpd
 import networkx as nx
 import networkit as nk
-from app.jhm_metric_calcs import utils
+from api.app.jhm_metric_calcs import utils
 from shapely.geometry import Point
 from typing import Iterable, Dict
 
 from geojson_pydantic import FeatureCollection
 from collections import defaultdict
 import numpy as np
-import constants
+from api.app.jhm_metric_calcs import constants
 
 
 def calc_accs_via_spsp(
