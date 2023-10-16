@@ -123,7 +123,7 @@ def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoSeries):
     )
 
 def _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean",dropna=True):
-    merged = gpd.sjoin(gdf, grid, how='left', op='within')
+    merged = gpd.sjoin(gdf, grid, how='left', predicate='within')
     merged[f'{col}_{aggfunc}']=1
     dissolve = merged.dissolve(by="index_right", aggfunc=aggfunc)
     grid.loc[dissolve.index, f'{col}_{aggfunc}'] = dissolve[col].values
@@ -132,7 +132,7 @@ def _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean",dropna=True):
     return grid
 
 
-def create_grid(gdf, n_cells=30):
+def create_grid(gdf, col, n_cells):
     xmin, ymin, xmax, ymax= gdf.total_bounds
     # how many cells across and down
     cell_size = (xmax-xmin)/n_cells
@@ -149,5 +149,5 @@ def create_grid(gdf, n_cells=30):
     grid = gpd.GeoDataFrame(grid_cells, columns=['geometry'], 
                                     crs=crs)
     
-    grid = _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean", dropna=True)
+    grid = _dissolve_by_grid(grid, gdf, col=col, aggfunc="mean", dropna=True)
     return grid
