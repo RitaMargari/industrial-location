@@ -7,6 +7,7 @@ from typing import Optional
 from sklearn.preprocessing import MinMaxScaler
 from pandas.core.frame import DataFrame
 from shapely.geometry import LineString
+from shapely import wkt
 
 
 '''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
@@ -240,3 +241,58 @@ def get_links(cities, responses, all_specialities):
     links = gpd.GeoDataFrame(links).sort_values(by=["num_responses"], ascending=False)
 
     return json.loads(links.to_json())
+
+
+def get_migration_links(responses: DataFrame, cities:DataFrame, specialists: list, city_selected:str):
+
+    if not all(isinstance(x, int) for x in specialists): 
+        raise TypeError(f"The keys in specialists must be inetegers.")
+        
+    if city_selected not in list(cities["region_city"]):
+        raise ValueError(f"The city {city_selected} is not supported")
+
+    cities = cities.set_index("region_city")
+    cities_geometry = cities["geometry"]
+
+    year = 2021
+    responses_loc = responses[responses["year"] == year]
+    responses_loc = responses_loc[responses_loc["cluster_center_cv"] != responses_loc["cluster_center_vacancy"]]
+    responses_loc = responses_loc[responses_loc["speciality_id"].isin(specialists)]
+    responses_loc = responses_loc[
+        (responses_loc["cluster_center_cv"] == city_selected) | 
+        (responses_loc["cluster_center_vacancy"]== city_selected)
+        ]
+
+    responses_aggr = responses_loc.groupby(["cluster_center_cv", "cluster_center_vacancy"])
+    responses_aggr = responses_aggr.count()["id_cv"].rename("responses").reset_index()
+    responses_aggr["geometry"] = responses_aggr.apply(lambda x: LineString(
+        (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
+        ), axis=1)
+    
+    responses_aggr["direction"] = None
+    responses_aggr.loc[responses_aggr["cluster_center_cv"] == city_selected, "direction"] = "out"
+    responses_aggr.loc[responses_aggr["cluster_center_vacancy"] == city_selected, "direction"] = "in"
+
+    responses_aggr = gpd.GeoDataFrame(responses_aggr)
+    return json.loads(responses_aggr.to_json())
+
+
+def get_agglomeration_links(agglomerations:DataFrame, cities:DataFrame, city_selected:str):
+
+    if city_selected not in list(cities["region_city"]):
+        raise ValueError(f"The city {city_selected} is not supported")
+
+    cities = cities.set_index("region_city")
+    cities_geometry = cities["geometry"]    
+
+    aggl_loc = agglomerations[agglomerations["cluster_center"] == city_selected]
+    aggl_loc = aggl_loc[aggl_loc["cluster_city"] != aggl_loc["cluster_center"]]
+
+    city_coord = cities_geometry.loc[city_selected]
+    aggl_loc["coordinates"] = aggl_loc["coordinates"].apply(wkt.loads)
+    aggl_loc["geometry"] = aggl_loc["coordinates"].apply(lambda x: LineString((x, city_coord)))
+
+    aggl_links = gpd.GeoDataFrame(aggl_loc[["cluster_city", "cluster_center", "geometry"]])
+    aggl_nodes = gpd.GeoDataFrame(aggl_loc[["coordinates", "cluster_city"]].rename(columns={"coordinates": "geometry"}))
+
+    return {"links": json.loads(aggl_links.to_json()), "nodes": json.loads(aggl_nodes.to_json())}
