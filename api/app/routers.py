@@ -19,12 +19,11 @@ router = APIRouter()
 faulthandler.enable()
 
 ontology = pd.read_csv("app/data/ontology.csv", index_col=0)
-cv = pd.read_csv("app/data/cv.csv", index_col=0)
 graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
-# solve the problem with duplicates
-cities = gpd.read_file("app/data/cities.geojson", index_col=0).drop_duplicates(
-    "city", keep=False
-)
+cities = gpd.read_file("app/data/cities.geojson", index_col=0)
+vacancy = pd.read_parquet("app/data/vacancy.gzip")
+responses = pd.read_parquet("app/data/responses.gzip")
+cv = pd.read_parquet("app/data/cv.gzip")
 
 gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_d = nx.read_graphml("app/data/G_drive.graphml")
@@ -73,20 +72,16 @@ def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends(
 
 
 @router.post(
-    "/calculation/estimates", response_model=FeatureCollection, tags=[Tags.edu_groups]
+    '/calculation/estimates',
+    response_model=schemas.EstimatesOut, tags=[Tags.estimates]
 )
 def get_potential_estimates(query_params: schemas.EstimatesIn):
     result = func.get_potential_estimates(
-        ontology=ontology,
-        cv=cv,
-        graduates=graduates,
-        cities=cities,
-        workforce_type=query_params.workforce_type,
-        specialities=query_params.specialities,
-        edu_groups=query_params.edu_groups,
-    )
+        ontology=ontology, cv=cv, graduates=graduates, cities=cities, responses=responses, vacancy=vacancy,
+        workforce_type = query_params.workforce_type, specialities=query_params.specialities, 
+        edu_groups=query_params.edu_groups, links_output=query_params.links_output
+        )
     return result
-
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):

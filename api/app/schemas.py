@@ -1,8 +1,8 @@
 import app.enums as enums
 
 from pydantic import BaseModel, root_validator
+from geojson_pydantic import FeatureCollection
 from typing import Optional, List, Dict
-
 
 class OntologyQueryParams:
     def __init__(
@@ -25,8 +25,10 @@ class EstimatesIn(BaseModel):
     workforce_type: enums.WorkForce
     specialities: Optional[dict]
     edu_groups: Optional[dict]
+    links_output: bool = True
 
-    @root_validator
+
+    @root_validator(pre=False, skip_on_failure=True)
     def check_user_dict_format(cls, values):
         for var, var_name in zip(
             [values["specialities"], values["edu_groups"]],
@@ -45,7 +47,7 @@ class EstimatesIn(BaseModel):
 
         return values
 
-    @root_validator
+    @root_validator(pre=False, skip_on_failure=True)
     def check_user_workforce_option(cls, values):
         if "workforce_type" in values:
             workforce_type = values["workforce_type"]
@@ -87,6 +89,9 @@ class EstimatesIn(BaseModel):
             }
         }
 
+class EstimatesOut(BaseModel):
+        estimates: FeatureCollection
+        links: Optional[FeatureCollection]
 
 class Workers(BaseModel):
     speciality: str
