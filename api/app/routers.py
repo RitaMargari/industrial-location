@@ -21,6 +21,7 @@ cities = gpd.read_file("app/data/cities.geojson", index_col=0)
 vacancy = pd.read_parquet("app/data/vacancy.gzip")
 responses = pd.read_parquet("app/data/responses.gzip")
 cv = pd.read_parquet("app/data/cv.gzip")
+agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
 
 
 class Tags(str, enums.AutoName):
@@ -31,6 +32,7 @@ class Tags(str, enums.AutoName):
     specialities = auto()
     edu_groups = auto()
     estimates = auto()
+    connections = auto()
 
 
 @router.get("/")
@@ -73,3 +75,17 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
         edu_groups=query_params.edu_groups, links_output=query_params.links_output
         )
     return result
+
+@router.post(
+    '/calculation/connection',
+    response_model=schemas.ConnectionsOut, tags=[Tags.connections]
+)
+def get_potential_estimates(query_params: schemas.ConnectionsIn):
+    migration = func.get_migration_links(responses, cities, query_params.specialists, query_params.city)
+    agglomeration = func.get_agglomeration_links(agglomerations, cities, query_params.city)
+
+    return {
+        "migration_link": migration, 
+        "agglomeration_links": agglomeration["links"], 
+        "agglomeration_nodes": agglomeration["nodes"]
+        }
