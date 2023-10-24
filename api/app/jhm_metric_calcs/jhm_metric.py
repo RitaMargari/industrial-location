@@ -66,7 +66,7 @@ def calc_iq_coef(gdf_houses: gpd.GeoDataFrame, salary: int) -> gpd.GeoDataFrame:
     )
 
     gdf_houses["Iq"] = gdf_houses[["Iq", "accs_time"]].apply(
-        lambda x: x["Iq"]
+        lambda x: round(x["Iq"], 3)
         if x["accs_time"] <= constants.LEAST_COMFORTABLE_ACCS_TIME
         else constants.MAX_COEF_VALUE,
         axis=1,
@@ -106,6 +106,8 @@ def calc_avg_coef(gdf_houses: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         axis=1,
     )
     return gdf_houses
+
+
 
 
 def calc_jhm_main(
@@ -162,55 +164,46 @@ def main(
             salary=worker.salary,
         )
 
-        gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
-        gdfs_results[worker.speciality]["grid_Iq"] = utils.create_grid(
-            gdfs_results.get(worker.speciality).get("house_points"),
-            col="Iq",
-            n_cells=n_cells_grid,
-        )
-        gdfs_results[worker.speciality]["grid_P_avg"] = utils.create_grid(
-            gdfs_results.get(worker.speciality).get("house_points"),
-            col="P_avg",
-            n_cells=n_cells_grid,
-        )
-        gdfs_results[worker.speciality]["grid_Idx"] = utils.create_grid(
-            gdfs_results.get(worker.speciality).get("house_points"),
-            col="Idx",
-            n_cells=n_cells_grid,
-        )
-
-        # mean_Iq_coef[worker.speciality] = Iq_coef_worker["Iq"].mean()
+        # filter gdf by jobs-housing match value
         mask = Iq_coef_worker["Iq"] >= constants.LEAST_COMFORTABLE_IQ_COEF_VALUE
-        Iq_coef_worker_tmp = Iq_coef_worker[mask].copy()
+        Iq_coef_worker = Iq_coef_worker[mask].copy()
 
-        for col in provision_columns:
-            P_mean_val = Iq_coef_worker_tmp.loc[:, col].mean()
-            K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
-            K3[worker.speciality][f"{col}_K"] = (
-                K1[worker.speciality][f"{col}_avg"] / K2[f"{col}_avg_all_houses"]
+        if Iq_coef_worker.shape[0] > 1:
+            gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
+
+            coefs = ['Iq', 'P_avg', 'Idx']
+            gdfs_results[worker.speciality][f"grid"] = utils.create_grid(
+                gdfs_results.get(worker.speciality).get("house_points"),
+                cols=coefs,
+                n_cells=n_cells_grid,
             )
 
-        K4[f"{worker.speciality}_avg"] = np.mean(
-            [val for inner_dict in K3.values() for val in inner_dict.values()]
-        )
+            for col in provision_columns:
+                P_mean_val = Iq_coef_worker.loc[:, col].mean()
+                K1[worker.speciality][f"{col}_avg"] = round(P_mean_val, 2)
+                K3[worker.speciality][f"{col}_K"] = (
+                    K1[worker.speciality][f"{col}_avg"] / K2[f"{col}_avg_all_houses"]
+                )
+
+            K4[f"{worker.speciality}_avg"] = round(np.mean(
+                [val for inner_dict in K3.values() for val in inner_dict.values()]
+            ), 3)
+
+        else:
+            # 0.01 is the least possible value
+            # it indicates that there are no suitable houses to live comfortably
+            K3[worker.speciality][f"{col}_K"] = 0.01
+            K4[f"{worker.speciality}_avg"] = 0.01
 
     all_K = [val for val in K4.values()]
-    K = np.mean(all_K)
-    D = np.max(all_K) / np.median(all_K)
-
-    conditions = [(K >= 1), (K > 0.7) & (K < 1), (K <= 0.7)]
-    values = ["green", "orange", "red"]
-
-    K_color = np.select(conditions, values)
+    K = round(np.mean(all_K), 3)
+    D = round(np.max(all_K) - np.median(all_K), 3)
 
     print(
         "\n\n K:",
         K,
         "\n\n D:",
         D,
-        "\n\n K_color:",
-        K_color,
-        "\n",
     )
 
-    return {"K": K, "D": D, "K_color": K_color, "gdfs": gdfs_results}
+    return {"K": K, "D": D, "K4": K4, "gdfs": gdfs_results}

@@ -70,6 +70,7 @@ def get_nk_distances(nk_dists, source_nodes, target_node):
     distances = [nk_dists.getDistance(target_node, node) for node in source_nodes]
     return distances
 
+
 def fix_crs(gdf):
     gdf_crs = gdf.crs.to_epsg()
 
@@ -77,17 +78,18 @@ def fix_crs(gdf):
         gdf = gdf.to_crs(gdf.estimate_utm_crs().to_epsg())
     else:
         pass
-    
+
     return gdf
 
+
 def G_to_gdf(G: nx.DiGraph):
-    graph_crs = G.graph['crs']
+    graph_crs = G.graph["crs"]
 
     graph_df = pd.DataFrame.from_dict(dict(G.nodes(data=True)), orient="index")
     graph_gdf = gpd.GeoDataFrame(
         graph_df,
         geometry=gpd.points_from_xy(graph_df["x"], graph_df["y"]),
-        crs=graph_crs
+        crs=graph_crs,
     )
 
     graph_gdf = fix_crs(graph_gdf)
@@ -104,6 +106,7 @@ def G_to_gdf(G: nx.DiGraph):
     graph_gdf2 = fix_crs(graph_gdf2)
 
     return graph_gdf2, G_nx2
+
 
 def convert_wgs_to_utm(lon: float, lat: float):
     """Based on lat and lng, return best utm epsg-code"""
@@ -122,32 +125,39 @@ def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoSeries):
         locations, return_distance=False, return_all=False
     )
 
-def _dissolve_by_grid(grid, gdf, col="Iq", aggfunc="mean",dropna=True):
-    merged = gpd.sjoin(gdf, grid, how='left', predicate='within')
-    merged[f'{col}_{aggfunc}']=1
+
+def _dissolve_by_grid(
+    grid: gpd.GeoDataFrame,
+    gdf: gpd.GeoDataFrame,
+    cols=["Iq"],
+    aggfunc: str = "mean",
+    dropna: bool = True,
+):
+    merged = gpd.sjoin(gdf, grid, how="left", predicate="within")
     dissolve = merged.dissolve(by="index_right", aggfunc=aggfunc)
-    grid.loc[dissolve.index, f'{col}_{aggfunc}'] = dissolve[col].values
+    for col in cols:
+        grid.loc[dissolve.index, f"{col}_{aggfunc}"] = dissolve[col].values
     if dropna:
         grid.dropna(inplace=True)
+    grid = grid.round(3)
     return grid
 
 
-def create_grid(gdf, col, n_cells):
-    xmin, ymin, xmax, ymax= gdf.total_bounds
+def create_grid(gdf, cols, n_cells):
+    xmin, ymin, xmax, ymax = gdf.total_bounds
     # how many cells across and down
-    cell_size = (xmax-xmin)/n_cells
+    cell_size = (xmax - xmin) / n_cells
     # projection of the grid
     crs = gdf.crs
     # create the cells in a loop
     grid_cells = []
-    for x0 in np.arange(xmin, xmax+cell_size, cell_size ):
-        for y0 in np.arange(ymin, ymax+cell_size, cell_size):
+    for x0 in np.arange(xmin, xmax + cell_size, cell_size):
+        for y0 in np.arange(ymin, ymax + cell_size, cell_size):
             # bounds
-            x1 = x0-cell_size
-            y1 = y0+cell_size
-            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1)  )
-    grid = gpd.GeoDataFrame(grid_cells, columns=['geometry'], 
-                                    crs=crs)
-    
-    grid = _dissolve_by_grid(grid, gdf, col=col, aggfunc="mean", dropna=True)
+            x1 = x0 - cell_size
+            y1 = y0 + cell_size
+            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1))
+    grid = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=crs)
+
+    grid = _dissolve_by_grid(grid, gdf, cols=cols, aggfunc="mean", dropna=True)
     return grid
