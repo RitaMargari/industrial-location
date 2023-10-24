@@ -5,6 +5,7 @@ import networkx as nx
 import math
 import shapely
 import numpy as np
+import requests
 
 
 def get_nx2_nk_idmap(G_nx):
@@ -161,3 +162,14 @@ def create_grid(gdf, cols, n_cells):
 
     grid = _dissolve_by_grid(grid, gdf, cols=cols, aggfunc="mean", dropna=True)
     return grid
+
+
+def read_intermodal_G_from_gdrive() -> nx.DiGraph:
+    # link to intermodal graph (without car transport type) to Gosha's private gdrive folder
+    url = f'https://drive.google.com/file/d/1vGGh1s7EIjxgGEF_0Dylb6XNBnCpApEQ/view?usp=sharing'
+    response = requests.get(url)
+    output = response.content
+
+    # Create nx graph object
+    graph = nx.read_adjlist(output.splitlines())
+    return graph

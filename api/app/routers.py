@@ -3,6 +3,7 @@ import pandas as pd
 import geopandas as gpd
 import app.func as func
 from app.jhm_metric_calcs import main
+from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -26,9 +27,8 @@ responses = pd.read_parquet("app/data/responses.gzip")
 cv = pd.read_parquet("app/data/cv.gzip")
 
 gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
-G_d = nx.read_graphml("app/data/G_drive.graphml")
-# G_t = nx.read_graphml("app/data/G_transport.graphml")
-G_t = None
+G_drive = nx.read_graphml("app/data/G_drive.graphml")
+G_intermodal = read_intermodal_G_from_gdrive()
 
 
 class Tags(str, enums.AutoName):
@@ -86,8 +86,8 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
     graph_type = {
-        "public_transport": G_t,
-        "private_car": G_d,
+        "public_transport": G_intermodal,
+        "private_car": G_drive,
     }
 
     return main(
