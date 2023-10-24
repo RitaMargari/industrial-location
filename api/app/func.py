@@ -107,7 +107,7 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
             index=cities.index
             )
 
-    links_json = get_links(cities, responses, all_specialities) if links_output else None
+    links_json = get_links(cities, responses, specialities) if links_output else None
         
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
@@ -227,9 +227,9 @@ def estimate_migration(responses, cv, vacancy, cities):
 Returns FeatureCollection that contains the number of responses of job seekers from city_source 
 to a job vacancies from city_destination 
 '''
-def get_links(cities, responses, all_specialities):
+def get_links(cities, responses, specialities):
 
-    responses_match = responses[responses["hh_name"].isin(all_specialities)]
+    responses_match = responses[responses["hh_name"].isin(specialities["speciality"])]
     links = responses_match.groupby(["cluster_center_cv", "cluster_center_vacancy"])["year"].count()
     links = links.rename("num_responses").reset_index()
     links = links.rename(columns={"cluster_center_cv": "city_source", "cluster_center_vacancy": "city_destination"})
@@ -238,7 +238,7 @@ def get_links(cities, responses, all_specialities):
     links["geometry"] = links.apply(
         lambda x: LineString((cities.loc[x.city_source]["geometry"], cities.loc[x.city_destination]["geometry"])), 
         axis=1)
-    links = gpd.GeoDataFrame(links).sort_values(by=["num_responses"], ascending=False)
+    links = gpd.GeoDataFrame(links).sort_values(by=["num_responses"], ascending=True)
 
     return json.loads(links.to_json())
 
