@@ -36,17 +36,19 @@ def get_ontology_edu_groups(ontology: DataFrame, industry_code: Optional[str] = 
 
 
 '''
-Returns geojson containing the estimates that reflect the potential of industry development in cities of Russian Federation
+Returns geojson containing (1) the estimates that reflect the potential of industry development in cities of Russian Federation
+                       and (2) cities' statistics
    
    Parameters:
         workforce_type (str) - specifies the type of workforce that is used in estimation ('all', "specialists", 'graduates')
         specialities (dict) - specifies specialisties ids (as keys) and their weights (as values)
         edu_groups (dict) - specifies edu groups ids (as keys) and their weights (as values)
+        links_output (bool) - specifies if the migration links are the part of the output
 '''
 def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataFrame, cities: DataFrame,
-                            responses: DataFrame, vacancy: DataFrame, workforce_type: str = 'all', 
-                            specialities: Optional[dict] = None, edu_groups: Optional[dict] = None, 
-                            links_output:bool=False):
+                            responses: DataFrame, vacancy: DataFrame, 
+                            workforce_type: str = 'all', specialities: Optional[dict] = None, 
+                            edu_groups: Optional[dict] = None, links_output:bool=False):
 
     for var, var_name in zip([specialities, edu_groups], ["specialities", "edu_groups"]):
         if var is None: break
@@ -60,10 +62,11 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     if workforce_type not in ["all", "graduates", "specialists"]: 
         raise ValueError(f"The workforce type '{workforce_type}'' is not supported.")
 
-    year = 2021
-    cv = cv[cv["year"] == year]
-    vacancy = vacancy[vacancy["year"] == year]
-    responses = responses[responses["year"] == year]
+    YEAR = 2021
+
+    cv_loc = cv[cv["year"] == YEAR]
+    vacancy_loc = vacancy[vacancy["year"] == YEAR]
+    responses_loc = responses[responses["year"] == YEAR]
 
     all_specialities = ontology.set_index("speciality_id")["speciality"].drop_duplicates()
     all_edu_groups = ontology.set_index("edu_group_id")[["type", "edu_group_code", "edu_group"]].drop_duplicates()
@@ -79,10 +82,16 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
         if not all(x in all_edu_groups.index for x in edu_groups.keys()): 
             fail_ids = [x for x in edu_groups.keys() if x not in all_edu_groups.index]
             raise ValueError(f"Educational groups' ids {fail_ids} don't present in the current ontology")
-
+        
+        edu_groups_relevant_prof = ontology[ontology["edu_group_id"].isin(edu_groups.keys())]["speciality"]
         edu_groups = pd.concat((all_edu_groups.loc[edu_groups.keys()], pd.Series(edu_groups).rename("weights")), axis=1)
         edu_groups = edu_groups.set_index(["type", "edu_group_code"])
+
+        # get estimates based on the number of potential graduates
         cities = estimate_graduates(graduates, cities, edu_groups)
+
+    else: 
+        edu_groups_relevant_prof = None
 
     if  workforce_type == "specialists" or workforce_type == "all":
 
@@ -97,25 +106,42 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
             list(zip(all_specialities.loc[specialities.keys()].to_list(), specialities.values())),
             columns=["speciality", "weights"]
         )
-        cities = estimate_cv(cv, cities, specialities)
 
-        cities = estimate_migration(responses, cv, vacancy, cities)
+        # get estimates based on the number of open resumes of relevant specialists
+        cities = estimate_cv(cv_loc, cities, specialities)
+        specialities_names = specialities["speciality"]
 
-        scaler = MinMaxScaler()
-        cities["estimate"] = pd.Series(
-            scaler.fit_transform(np.expand_dims(cities["estimate"].to_numpy(), 1)).squeeze(),
-            index=cities.index
-            )
+    else: 
+        specialities_names = None
 
-    links_json = get_links(cities, responses, specialities) if links_output else None
+
+    # frame the complete list of the specialists based on the 'specialities' and 'edu_groups' variables
+    specialities_names = list(pd.concat((specialities_names, edu_groups_relevant_prof)).drop_duplicates())
+
+    cv_loc = cv_loc[cv_loc["hh_name"].isin(specialities_names)]
+    vacancy_loc = vacancy_loc[vacancy_loc["title_hh"].isin(specialities_names)]
+    responses_loc = responses_loc[responses_loc["hh_name"].isin(specialities_names)]
+
+    # get descriptive characteristics of cities 
+    # (city type, quality of urban environment, number of open resume/vacancies, salary offered)
+    cities = get_cities_stat(cv_loc, vacancy_loc, cities)
+    
+    # get estimates based on observed pseudo migration (responses stat)
+    cities = estimate_migration(responses_loc, cities)
+
+    # if links_output is True, prepare the strongest (migration) connections between cities
+    links_json = get_migration_links(responses_loc, cities) if links_output else None
+
+    # scale estimates
+    scaler = MinMaxScaler()
+    cities["estimate"] = pd.Series(
+        scaler.fit_transform(np.expand_dims(cities["estimate"].to_numpy(), 1)).squeeze(),
+        index=cities.index
+        )
         
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
-    cities = cities.reset_index().reindex([
-        "region", "city", "region_city", "population", "estimate", "graduates_forecast_number", 
-        "graduates_forecast_sum_number", "specialists_number", "specialists_sum_number", "one_vacancy_out_response", 
-        "probability_to_move", "geometry"
-        ], axis=1)
+    cities = cities.reset_index()
         
     return  {"estimates": json.loads(cities.to_json()), "links": links_json}
 
@@ -170,11 +196,11 @@ def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
         cities["estimate"] = cities["estimate"].add(0).fillna(cities["estimate"]).dropna()
         return cities
 
-    cv_select = cv_select.groupby(["region_city", "hh_name"])["id_cv"].count().rename("cv_count").reset_index()
+    cv_select = cv_select.groupby(["cluster_center", "hh_name"])["id_cv"].count().rename("cv_count").reset_index()
     cv_select = cv_select.join(specialities.set_index("speciality")["weights"], on="hh_name")
     cv_select["cv_count_weighted"] = cv_select["cv_count"] * cv_select["weights"]
 
-    cv_cities_gr = cv_select.groupby(["region_city"])
+    cv_cities_gr = cv_select.groupby(["cluster_center"])
     cv_cities = cv_cities_gr[["cv_count", "cv_count_weighted"]].sum().add_suffix("_sum")
     cv_cities["cv_count"] = cv_cities_gr[["hh_name", "cv_count"]].apply(
         lambda x: x.set_index("hh_name")["cv_count"].to_dict()
@@ -195,21 +221,44 @@ def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
 
     return cities
 
-def estimate_migration(responses, cv, vacancy, cities): 
+
+'''
+Returns GeoDataFrame that contains cities' information about the number of open resumes and vacancies, min/max/median salary offered
+'''
+def get_cities_stat(cv, vacancy, cities):
+
+    # the number of cvs is counted over city's agglomeration (by 'cluster_center' field) since we assume people will be 
+    # willing to move there if the new fabric is open
+    cities = cities.join(cv.groupby(["cluster_center"])["id_cv"].count().rename("cv_count"))
+
+    # however, for vacancies we use feature 'region_city' which points out exact city as the characteristics of this city
+    # will influence the desire of other people (outside of agglomeration) to move there 
+    cities = cities.join(vacancy.groupby(["region_city"]).agg(
+        {"min_salary": "min", "max_salary": "max", "median_salary": "median", "id_vacancy": "count"}
+        ).rename(columns={"id_vacancy": "vacancy_count"}))
     
+    return cities
+
+
+'''
+Returns GeoDataFrame that contains the estimates of industry development potential for cities of Russian Federation
+based on the megration (responses) stat
+'''
+def estimate_migration(responses, cities): 
+
+    num_vacancy = cities["vacancy_count"] # the total number of relevan vacancies in a city
+    num_responses = responses.groupby(["cluster_center_cv"])["id_cv"].count() # the total number of responses on vacancies in a city
+
     migration = responses[responses["cluster_center_cv"] != responses["cluster_center_vacancy"]]
 
-    num_in_migration = migration.groupby(["cluster_center_vacancy"])["id_cv"].nunique()
-    num_out_migration = migration.groupby(["cluster_center_cv"])["id_cv"].nunique()
-
-    num_vacancy = vacancy.groupby(["cluster_center"])["id_vacancy"].nunique()
-    num_resume = cv.groupby(["cluster_center"])["id_cv"].nunique()
+    num_in_migration = migration.groupby(["cluster_center_vacancy"])["id_cv"].count()
+    num_out_migration = migration.groupby(["cluster_center_cv"])["id_cv"].count() # the number of responses on vacancies in other cities
 
     in_coef = (num_in_migration / num_vacancy).fillna(0)
-    out_coef = (num_out_migration / num_resume).fillna(0)
+    out_coef = (num_out_migration / num_responses).fillna(0)
 
     migration_stat = pd.concat([in_coef.rename("one_vacancy_out_response"), out_coef.rename("probability_to_move")], axis=1)
-    cities = cities.join(migration_stat, on="region_city").fillna(0)
+    cities = cities.join(migration_stat.round(3), on="region_city").fillna(0)
 
     scaler = MinMaxScaler()
     column_norm = ["one_vacancy_out_response", "probability_to_move"]
@@ -223,14 +272,14 @@ def estimate_migration(responses, cv, vacancy, cities):
     
     return cities
 
+
 '''
-Returns FeatureCollection that contains the number of responses of job seekers from city_source 
+Returns FeatureCollection that contains the number of job seekers' responses from city_source 
 to a job vacancies from city_destination 
 '''
-def get_links(cities, responses, specialities):
+def get_migration_links(responses, cities):
 
-    responses_match = responses[responses["hh_name"].isin(specialities["speciality"])]
-    links = responses_match.groupby(["cluster_center_cv", "cluster_center_vacancy"])["year"].count()
+    links = responses.groupby(["cluster_center_cv", "cluster_center_vacancy"])["year"].count()
     links = links.rename("num_responses").reset_index()
     links = links.rename(columns={"cluster_center_cv": "city_source", "cluster_center_vacancy": "city_destination"})
     links = links[links["city_source"] != links["city_destination"]]
@@ -243,7 +292,10 @@ def get_links(cities, responses, specialities):
     return json.loads(links.to_json())
 
 
-def get_migration_links(responses: DataFrame, cities:DataFrame, specialists: list, city_selected:str):
+'''
+Returns GeoDataFrame that contains migration connections of chosen city with other ones
+'''
+def get_city_migration_links(responses: DataFrame, cities:DataFrame, specialists: list, city_selected:str):
 
     if not all(isinstance(x, int) for x in specialists): 
         raise TypeError(f"The keys in specialists must be inetegers.")
@@ -277,7 +329,10 @@ def get_migration_links(responses: DataFrame, cities:DataFrame, specialists: lis
     return json.loads(responses_aggr.to_json())
 
 
-def get_agglomeration_links(agglomerations:DataFrame, cities:DataFrame, city_selected:str):
+'''
+Returns GeoDataFrame that contains agglomeration connections of chosen city with other ones
+'''
+def get_city_agglomeration_links(agglomerations:DataFrame, cities:DataFrame, city_selected:str):
 
     if city_selected not in list(cities["region_city"]):
         raise ValueError(f"The city {city_selected} is not supported")
