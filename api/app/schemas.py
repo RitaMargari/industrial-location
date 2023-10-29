@@ -90,7 +90,8 @@ class EstimatesIn(BaseModel):
         }
 
 class EstimatesOut(BaseModel):
-    estimates: FeatureCollection    links: Optional[FeatureCollection]
+    estimates: FeatureCollection    
+    links: Optional[FeatureCollection]
 
 
 
