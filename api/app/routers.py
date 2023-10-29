@@ -25,6 +25,7 @@ cities = gpd.read_file("app/data/cities.geojson", index_col=0)
 vacancy = pd.read_parquet("app/data/vacancy.gzip")
 responses = pd.read_parquet("app/data/responses.gzip")
 cv = pd.read_parquet("app/data/cv.gzip")
+agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
 
 gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_drive = nx.read_graphml("app/data/G_drive.graphml")
@@ -39,6 +40,7 @@ class Tags(str, enums.AutoName):
     specialities = auto()
     edu_groups = auto()
     estimates = auto()
+    connections = auto()
     jhm_metric = auto()
 
 
@@ -82,6 +84,20 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
         edu_groups=query_params.edu_groups, links_output=query_params.links_output
         )
     return result
+
+@router.post(
+    '/calculation/connection',
+    response_model=schemas.ConnectionsOut, tags=[Tags.connections]
+)
+def get_potential_estimates(query_params: schemas.ConnectionsIn):
+    migration = func.get_migration_links(responses, cities, query_params.specialists, query_params.city)
+    agglomeration = func.get_agglomeration_links(agglomerations, cities, query_params.city)
+
+    return {
+        "migration_link": migration, 
+        "agglomeration_links": agglomeration["links"], 
+        "agglomeration_nodes": agglomeration["nodes"]
+        }
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):

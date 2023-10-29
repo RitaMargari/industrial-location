@@ -90,8 +90,27 @@ class EstimatesIn(BaseModel):
         }
 
 class EstimatesOut(BaseModel):
-        estimates: FeatureCollection
-        links: Optional[FeatureCollection]
+    estimates: FeatureCollection    links: Optional[FeatureCollection]
+
+
+
+class ConnectionsIn(BaseModel):
+    specialists: List[int]
+    city: str
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "specialists": [0, 1, 4, 8, 10, 11, 14, 16, 17, 18, 22],
+                "city": "Тюменская область, Тюмень"
+            }
+        }
+
+class ConnectionsOut(BaseModel):
+    migration_link: FeatureCollection
+    agglomeration_links: FeatureCollection
+    agglomeration_nodes: FeatureCollection
+
 
 class Workers(BaseModel):
     speciality: str
