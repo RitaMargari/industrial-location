@@ -108,8 +108,6 @@ def calc_avg_coef(gdf_houses: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf_houses
 
 
-
-
 def calc_jhm_main(
     G: nx.DiGraph,
     gdf_houses: gpd.GeoDataFrame,
@@ -136,7 +134,7 @@ def main(
     worker_and_salary: Iterable[Dict[str, float]],
     graph: nx.DiGraph,
     company_location: Dict[str, float],
-    n_cells_grid: int = 30,
+    cell_size_meters: int = 30,
 ):
     gdfs_results = defaultdict(
         lambda: defaultdict(gpd.GeoDataFrame)
@@ -164,19 +162,22 @@ def main(
             salary=worker.salary,
         )
 
-        # filter gdf by jobs-housing match value
-        mask = Iq_coef_worker["Iq"] >= constants.LEAST_COMFORTABLE_IQ_COEF_VALUE
-        Iq_coef_worker = Iq_coef_worker[mask].copy()
-
-        if Iq_coef_worker.shape[0] > 1:
+        if Iq_coef_worker.shape[0] > 1:            
             gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
 
             coefs = ['Iq', 'P_avg', 'Idx']
-            gdfs_results[worker.speciality][f"grid"] = utils.create_grid(
+            gdfs_results[worker.speciality]["grid"] = utils.create_grid(
                 gdfs_results.get(worker.speciality).get("house_points"),
                 cols=coefs,
-                n_cells=n_cells_grid,
+                cell_size_meters=cell_size_meters,
             )
+            gdfs_results[worker.speciality]["grid"].to_crs(constants.CRS_WGS84)
+
+            # filter gdf by jobs-housing match value
+            mask = Iq_coef_worker["Iq"] >= constants.LEAST_COMFORTABLE_IQ_COEF_VALUE
+            Iq_coef_worker = Iq_coef_worker[mask].copy()
+            gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
+            gdfs_results[worker.speciality]["house_points"].to_crs(constants.CRS_WGS84, inplace=True)
 
             for col in provision_columns:
                 P_mean_val = Iq_coef_worker.loc[:, col].mean()
@@ -192,7 +193,8 @@ def main(
         else:
             # 0.01 is the least possible value
             # it indicates that there are no suitable houses to live comfortably
-            K3[worker.speciality][f"{col}_K"] = 0.01
+            for col in provision_columns:
+                K3[worker.speciality][f"{col}_K"] = 0.01
             K4[f"{worker.speciality}_avg"] = 0.01
 
     all_K = [val for val in K4.values()]

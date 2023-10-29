@@ -144,10 +144,14 @@ def _dissolve_by_grid(
     return grid
 
 
-def create_grid(gdf, cols, n_cells):
+from shapely.geometry import box
+
+def create_grid(gdf, cols, cell_size_meters):
     xmin, ymin, xmax, ymax = gdf.total_bounds
-    # how many cells across and down
-    cell_size = (xmax - xmin) / n_cells
+    # determine cell size in meters
+    xdist = xmax - xmin
+    n_cells = int(xdist / cell_size_meters)
+    cell_size = xdist / n_cells
     # projection of the grid
     crs = gdf.crs
     # create the cells in a loop
@@ -155,9 +159,9 @@ def create_grid(gdf, cols, n_cells):
     for x0 in np.arange(xmin, xmax + cell_size, cell_size):
         for y0 in np.arange(ymin, ymax + cell_size, cell_size):
             # bounds
-            x1 = x0 - cell_size
-            y1 = y0 + cell_size
-            grid_cells.append(shapely.geometry.box(x0, y0, x1, y1))
+            x1 = x0 + cell_size
+            y1 = y0 - cell_size
+            grid_cells.append(box(x0, y0, x1, y1))
     grid = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=crs)
 
     grid = _dissolve_by_grid(grid, gdf, cols=cols, aggfunc="mean", dropna=True)
@@ -166,8 +170,8 @@ def create_grid(gdf, cols, n_cells):
 
 def read_intermodal_G_from_gdrive() -> nx.DiGraph:
     # link to intermodal graph (without car transport type) to Gosha's private gdrive folder
-    url = f'https://drive.google.com/file/d/1vGGh1s7EIjxgGEF_0Dylb6XNBnCpApEQ/view?usp=sharing'
-    response = requests.get(url)
+    url = 'https://drive.google.com/file/d/1vGGh1s7EIjxgGEF_0Dylb6XNBnCpApEQ/view?usp=sharing'
+    response = requests.get(url, timeout=300)
     output = response.content
 
     # Create nx graph object
