@@ -2,7 +2,7 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
-from app.jhm_metric_calcs import main
+from app.jhm_metric_calcs.jhm_metric import main
 from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
@@ -110,5 +110,5 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         gdf_houses,
         query_params.worker_and_salary,
         graph_type[query_params.transportation_type],
-        query_params.company_location,
+        query_params.company_location
     )
