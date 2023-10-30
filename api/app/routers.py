@@ -89,7 +89,7 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
     '/calculation/connection',
     response_model=schemas.ConnectionsOut, tags=[Tags.connections]
 )
-def get_potential_estimates(query_params: schemas.ConnectionsIn):
+def get_connections(query_params: schemas.ConnectionsIn):
     migration = func.get_city_migration_links(responses, cities, query_params.specialists, query_params.city)
     agglomeration = func.get_city_agglomeration_links(agglomerations, cities, query_params.city)
 
