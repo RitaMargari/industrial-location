@@ -2,7 +2,7 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
-from app.jhm_metric_calcs import main
+from app.jhm_metric_calcs.jhm_metric import main
 from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
@@ -89,7 +89,7 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
     '/calculation/connection',
     response_model=schemas.ConnectionsOut, tags=[Tags.connections]
 )
-def get_potential_estimates(query_params: schemas.ConnectionsIn):
+def get_connections(query_params: schemas.ConnectionsIn):
     migration = func.get_city_migration_links(responses, cities, query_params.specialists, query_params.city)
     agglomeration = func.get_city_agglomeration_links(agglomerations, cities, query_params.city)
 
@@ -110,5 +110,5 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         gdf_houses,
         query_params.worker_and_salary,
         graph_type[query_params.transportation_type],
-        query_params.company_location,
+        query_params.company_location
     )
