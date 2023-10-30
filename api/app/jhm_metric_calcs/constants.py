@@ -1,0 +1,5 @@
+CRS_WGS84 = 4326
+MOST_COMFORTABLE_ACCS_TIME = 15 # minutes
+LEAST_COMFORTABLE_ACCS_TIME = 90 # minutes
+LEAST_COMFORTABLE_IQ_COEF_VALUE = 0.3
+MAX_COEF_VALUE = 1 # jobs-housing mismatch (jhm) coef value

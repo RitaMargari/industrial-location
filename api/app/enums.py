@@ -23,3 +23,7 @@ class WorkForce(str, Enum):
     ALL = 'all'
     SPECIALISTS = 'specialists'
     GRADUATES = 'graduates'
+
+class Transportation(str, Enum):
+    PRIVATE_CAR = 'private_car'
+    PUBLIC_TRANSPORT = 'public_transport',

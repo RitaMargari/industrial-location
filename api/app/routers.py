@@ -2,6 +2,8 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
+from app.jhm_metric_calcs import main
+from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -9,7 +11,9 @@ from geojson_pydantic import FeatureCollection
 
 from enum import auto
 from app import enums, schemas
-from typing import Optional
+import networkx as nx
+from collections import defaultdict
+import numpy as np
 
 
 router = APIRouter()
@@ -23,6 +27,10 @@ responses = pd.read_parquet("app/data/responses.gzip")
 cv = pd.read_parquet("app/data/cv.gzip")
 agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
 
+gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
+G_drive = nx.read_graphml("app/data/G_drive.graphml")
+G_intermodal = read_intermodal_G_from_gdrive()
+
 
 class Tags(str, enums.AutoName):
     def _generate_next_value_(name, start, count, last_values):
@@ -33,6 +41,7 @@ class Tags(str, enums.AutoName):
     edu_groups = auto()
     estimates = auto()
     connections = auto()
+    jhm_metric = auto()
 
 
 @router.get("/")
@@ -40,29 +49,29 @@ async def read_root():
     return {"Hello": "World"}
 
 
-@router.get(
-    '/ontology/get_industry',
-    response_model=dict, tags=[Tags.industry]
-)
+@router.get("/ontology/get_industry", response_model=dict, tags=[Tags.industry])
 def get_ontology_industry(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_industry(ontology=ontology, industry_code=query_params.industry_code)
+    result = func.get_ontology_industry(
+        ontology=ontology, industry_code=query_params.industry_code
+    )
     return result
 
-@router.get(
-    '/ontology/get_specialities',
-    response_model=dict, tags=[Tags.specialities]
-)
+
+@router.get("/ontology/get_specialities", response_model=dict, tags=[Tags.specialities])
 def get_ontology_specialities(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_specialities(ontology=ontology, industry_code=query_params.industry_code)
+    result = func.get_ontology_specialities(
+        ontology=ontology, industry_code=query_params.industry_code
+    )
     return result
 
-@router.get(
-    '/ontology/get_edu_groups',
-    response_model=dict, tags=[Tags.edu_groups]
-)
+
+@router.get("/ontology/get_edu_groups", response_model=dict, tags=[Tags.edu_groups])
 def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends()):
-    result = func.get_ontology_edu_groups(ontology=ontology, industry_code=query_params.industry_code)
+    result = func.get_ontology_edu_groups(
+        ontology=ontology, industry_code=query_params.industry_code
+    )
     return result
+
 
 @router.post(
     '/calculation/estimates',
@@ -89,3 +98,17 @@ def get_potential_estimates(query_params: schemas.ConnectionsIn):
         "agglomeration_links": agglomeration["links"], 
         "agglomeration_nodes": agglomeration["nodes"]
         }
+
+@router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
+def get_jhm_metric(query_params: schemas.JhmQueryParams):
+    graph_type = {
+        "public_transport": G_intermodal,
+        "private_car": G_drive,
+    }
+
+    return main(
+        gdf_houses,
+        query_params.worker_and_salary,
+        graph_type[query_params.transportation_type],
+        query_params.company_location,
+    )

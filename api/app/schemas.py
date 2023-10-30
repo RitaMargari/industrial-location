@@ -2,20 +2,24 @@ import app.enums as enums
 
 from pydantic import BaseModel, root_validator
 from geojson_pydantic import FeatureCollection
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 class OntologyQueryParams:
-    def __init__(self,
-                 industry_code: Optional[enums.IndustryEnums] = None,
-                 ):
+    def __init__(
+        self,
+        industry_code: Optional[enums.IndustryEnums] = None,
+    ):
         self.industry_code = industry_code
 
     class Config:
         schema_extra = {
-            'example': [
-                {'industry_code': 'pharma',}
+            "example": [
+                {
+                    "industry_code": "pharma",
+                }
             ]
         }
+
 
 class EstimatesIn(BaseModel):
     workforce_type: enums.WorkForce
@@ -26,31 +30,41 @@ class EstimatesIn(BaseModel):
 
     @root_validator(pre=False, skip_on_failure=True)
     def check_user_dict_format(cls, values):
-        for var, var_name in zip([values["specialities"], values["edu_groups"]], ["specialities", "edu_groups"]):
-            if var is None: break
-            if not all(isinstance(eval(x), int) for x in list(var.keys())): 
+        for var, var_name in zip(
+            [values["specialities"], values["edu_groups"]],
+            ["specialities", "edu_groups"],
+        ):
+            if var is None:
+                break
+            if not all(isinstance(eval(x), int) for x in list(var.keys())):
                 raise TypeError(f"The keys in {var_name} must be inetegers.")
-            if not all(isinstance(x, float) or isinstance(x, int) for x in list(var.values())): 
+            if not all(
+                isinstance(x, float) or isinstance(x, int) for x in list(var.values())
+            ):
                 raise TypeError(f"The values in {var_name} must be floats from 0 to 1.")
-            if not all((x >= 0 and x <=1) for x in list(var.values())): 
+            if not all((x >= 0 and x <= 1) for x in list(var.values())):
                 raise ValueError(f"The values in {var_name} must be between 0 and 1.")
-            
+
         return values
-        
 
     @root_validator(pre=False, skip_on_failure=True)
     def check_user_workforce_option(cls, values):
-        
-        if "workforce_type" in values: 
+        if "workforce_type" in values:
             workforce_type = values["workforce_type"]
 
-            graduates_state = workforce_type == 'all' or workforce_type == 'graduates'
+            graduates_state = workforce_type == "all" or workforce_type == "graduates"
             if graduates_state and values["edu_groups"] is None:
-                raise ValueError(f"With workforce_type == '{workforce_type}' edu_groups can't be None")
-            
-            specialists_state = workforce_type == 'all' or workforce_type == 'specialists'
+                raise ValueError(
+                    f"With workforce_type == '{workforce_type}' edu_groups can't be None"
+                )
+
+            specialists_state = (
+                workforce_type == "all" or workforce_type == "specialists"
+            )
             if specialists_state and values["specialities"] is None:
-                raise ValueError(f"With workforce_type == '{workforce_type}' specialities can't be None")
+                raise ValueError(
+                    f"With workforce_type == '{workforce_type}' specialities can't be None"
+                )
 
         return values
 
@@ -58,16 +72,27 @@ class EstimatesIn(BaseModel):
         schema_extra = {
             "example": {
                 "workforce_type": "all",
-                "specialities": {18: 0.5, 1: 1, 14: 1, 0: 0.9, 11: 0.2, 22: 1, 4: 0.1, 10: 0.9, 16: 1, 8: 0.5, 17: 0.6},
+                "specialities": {
+                    18: 0.5,
+                    1: 1,
+                    14: 1,
+                    0: 0.9,
+                    11: 0.2,
+                    22: 1,
+                    4: 0.1,
+                    10: 0.9,
+                    16: 1,
+                    8: 0.5,
+                    17: 0.6,
+                },
                 "edu_groups": {20: 0.5, 12: 0.7, 3: 0.1, 21: 0.6, 5: 0.5},
-                "links_output": True
             }
         }
 
-
 class EstimatesOut(BaseModel):
-    estimates: FeatureCollection
+    estimates: FeatureCollection    
     links: Optional[FeatureCollection]
+
 
 
 class ConnectionsIn(BaseModel):
@@ -86,3 +111,27 @@ class ConnectionsOut(BaseModel):
     migration_link: FeatureCollection
     agglomeration_links: FeatureCollection
     agglomeration_nodes: FeatureCollection
+
+
+class Workers(BaseModel):
+    speciality: str
+    salary: int
+
+
+class JhmQueryParams(BaseModel):
+    worker_and_salary: List[Workers]
+    transportation_type: enums.Transportation
+    company_location: Dict[str, float]
+    filter_coef: Optional[bool] = True
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "company_location": {"lat": 59.860510, "lon": 30.211518},
+                "transportation_type": "private_car",
+                "worker_and_salary": [
+                    {"speciality": "worker_1", "salary": 45000},
+                    {"speciality": "worker_2", "salary": 70000},
+                ],
+            }
+        }
