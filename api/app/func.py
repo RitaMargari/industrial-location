@@ -227,10 +227,6 @@ Returns GeoDataFrame that contains cities' information about the number of open 
 '''
 def get_cities_stat(cv, vacancy, cities):
 
-    # the number of cvs is counted over city's agglomeration (by 'cluster_center' field) since we assume people will be 
-    # willing to move there if the new fabric is open
-    cities = cities.join(cv.groupby(["cluster_center"])["id_cv"].count().rename("cv_count"))
-
     # however, for vacancies we use feature 'region_city' which points out exact city as the characteristics of this city
     # will influence the desire of other people (outside of agglomeration) to move there 
     cities = cities.join(vacancy.groupby(["region_city"]).agg(
