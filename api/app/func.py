@@ -5,6 +5,8 @@ import json
 
 from typing import Optional
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
+from catboost import Pool
 from pandas.core.frame import DataFrame
 from shapely.geometry import LineString
 from shapely import wkt
@@ -124,10 +126,10 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
 
     # get descriptive characteristics of cities 
     # (city type, quality of urban environment, number of open resume/vacancies, salary offered)
-    cities = get_cities_stat(cv_loc, vacancy_loc, cities)
+    cities = get_cities_stat(cv, vacancy, cities)
     
     # get estimates based on observed pseudo migration (responses stat)
-    cities = estimate_migration(responses_loc, cities)
+    cities = estimate_migration(responses, cities)
 
     # if links_output is True, prepare the strongest (migration) connections between cities
     links_json = get_migration_links(responses_loc, cities) if links_output else None
@@ -226,6 +228,10 @@ def estimate_cv(cv: DataFrame, cities: DataFrame, specialities: DataFrame):
 Returns GeoDataFrame that contains cities' information about the number of open resumes and vacancies, min/max/median salary offered
 '''
 def get_cities_stat(cv, vacancy, cities):
+    
+    # the number of cvs is counted over city's agglomeration (by 'cluster_center' field) since we assume people will be 
+    # willing to move there if the new fabric is open
+    cities = cities.join(cv.groupby(["cluster_center"])["id_cv"].count().rename("cv_count"))
 
     # however, for vacancies we use feature 'region_city' which points out exact city as the characteristics of this city
     # will influence the desire of other people (outside of agglomeration) to move there 
@@ -249,6 +255,9 @@ def estimate_migration(responses, cities):
 
     num_in_migration = migration.groupby(["cluster_center_vacancy"])["id_cv"].count()
     num_out_migration = migration.groupby(["cluster_center_cv"])["id_cv"].count() # the number of responses on vacancies in other cities
+    cities = cities.join(pd.concat((
+        num_in_migration.rename("num_in_migration"), num_out_migration.rename("num_out_migration")
+        ), axis=1), on="region_city").fillna(0)
 
     in_coef = (num_in_migration / num_vacancy).fillna(0)
     out_coef = (num_out_migration / num_responses).fillna(0)
@@ -347,3 +356,104 @@ def get_city_agglomeration_links(agglomerations:DataFrame, cities:DataFrame, cit
     aggl_nodes = gpd.GeoDataFrame(aggl_loc[["coordinates", "cluster_city"]].rename(columns={"coordinates": "geometry"}))
 
     return {"links": json.loads(aggl_links.to_json()), "nodes": json.loads(aggl_nodes.to_json())}
+
+
+def predict_links(cv: pd.DataFrame, vacancy: pd.DataFrame, DM: pd.DataFrame, cities: gpd.GeoDataFrame, 
+                  model, city_name: str, responses):
+    
+    city = cities[cities["region_city"] == city_name]
+
+    cities = cities.set_index("region_city")
+    # cities = get_cities_stat(cv, vacancy, cities)
+    cities = cities[cities["city_category"] != 0]
+
+    # cities = pd.concat((cities[cities.index != city_name], city.set_index("region_city")))
+    cities_features = decode_features(cities)
+
+    other_cities = cities_features.index
+    responses = pd.DataFrame({
+        'cluster_center_cv': [city_name for i in range(len(other_cities))] + [i for i in other_cities], 
+        'cluster_center_vacancy': [i for i in other_cities] + [city_name for i in range(len(other_cities))],
+        'distance': None})
+
+    responses = responses.set_index('cluster_center_vacancy')
+    responses['distance'] = DM.loc[city_name]
+
+    responses = responses.reset_index().set_index('cluster_center_cv')
+    responses.loc[responses.index != city_name, 'distance'] = DM.loc[other_cities, city_name]
+    responses = responses.reset_index().drop_duplicates()
+
+    responses['x'] = list(np.concatenate((
+        cities_features.loc[list(responses['cluster_center_cv'])].to_numpy(), 
+        cities_features.loc[list(responses['cluster_center_vacancy'])].to_numpy(), 
+        responses['distance'].astype('float').round(3).to_numpy().reshape(len(responses), 1)
+        ), axis=1))
+
+    responses['responses'] = model.predict(Pool(data=responses['x']))
+    responses.loc[responses['responses'] < 0, 'responses'] = 0
+    responses['responses'] = responses['responses'].apply(lambda x: 0 if x < 1 else x)
+    responses['responses'] = responses['responses'].round()
+
+
+    num_vacancy = cities.loc[city_name, "vacancy_count"] # the total number of relevan vacancies in a city
+    num_responses = responses[responses["cluster_center_cv"] == city_name]['responses'].sum() # the total number of responses on vacancies in a city
+
+    migration = responses[responses["cluster_center_cv"] != responses["cluster_center_vacancy"]]
+
+    num_out_migration = migration[migration["cluster_center_cv"] == city_name]["responses"].sum()
+    num_in_migration = migration[migration["cluster_center_vacancy"] == city_name]["responses"].sum() # the number of responses on vacancies in other cities
+
+    cities.loc[city_name, 'one_vacancy_out_response'] = num_in_migration / num_vacancy
+    cities.loc[city_name, 'probability_to_move'] = num_out_migration / num_responses
+
+    scaler = MinMaxScaler()
+    column_norm = ["specialists_sum_number", "graduates_forecast_sum_number", "probability_to_move", "one_vacancy_out_response"]
+    migration_estinate = pd.DataFrame(
+        scaler.fit_transform(cities[column_norm].to_numpy()),
+        index=cities.index, columns=column_norm
+    )
+    cities["estimate"] = migration_estinate['specialists_sum_number'] \
+                        + migration_estinate['graduates_forecast_sum_number'] \
+                        + migration_estinate["one_vacancy_out_response"] \
+                        - migration_estinate["probability_to_move"]
+
+    scaler = MinMaxScaler()
+    cities["estimate"] = pd.Series(
+        scaler.fit_transform(np.expand_dims(cities["estimate"].to_numpy(), 1)).squeeze(),
+        index=cities.index
+        )
+    
+    return cities.loc[[city_name]]
+
+def decode_features(df):
+
+    df_features = df[[
+        # 'population',
+        "city_category", 
+        "harsh_climate", 
+        "ueqi_residential", 
+        "ueqi_street_networks", 
+        "ueqi_green_spaces", 
+        "ueqi_public_and_business_infrastructure", 
+        "ueqi_social_and_leisure_infrastructure",
+        "ueqi_citywide_space",
+        "cv_count",
+        "vacancy_count",
+        "factories_total",
+        'min_salary',
+        'max_salary',
+        'median_salary'
+        ]]
+    
+    # df_features['cv_count'] = df_features['cv_count'] / df_features['population']
+    # df_features['vacancy_count'] = df_features['vacancy_count'] / df_features['population']
+    # df_features = df_features.drop(['population'], axis=1)
+
+    one_hot = OneHotEncoder(drop='first')
+    encoded_category = one_hot.fit_transform(np.expand_dims(df["city_category"].to_numpy(), 1)).toarray()
+    encoded_category_names = one_hot.get_feature_names_out(["category"])
+    df_features.loc[:, encoded_category_names] = encoded_category
+    df_features = df_features.drop(["city_category"], axis=1)
+    df_features["harsh_climate"] = df_features["harsh_climate"].astype(int).fillna(0)
+
+    return df_features
