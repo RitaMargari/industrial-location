@@ -1,7 +1,7 @@
 import app.enums as enums
 import json
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, root_validator, conint
 from geojson_pydantic import FeatureCollection
 from typing import Optional, List, Dict
 
@@ -140,23 +140,24 @@ class PredictionOut(BaseModel):
 
 class Workers(BaseModel):
     speciality: str
-    salary: int
+    salary: conint(ge=10_000, lt=500_000)
 
 
 class JhmQueryParams(BaseModel):
     worker_and_salary: List[Workers]
     transportation_type: enums.Transportation
     company_location: Dict[str, float]
-    filter_coef: Optional[bool] = True
+    cell_size_meters: conint(ge=300, lt=5_000) = 500
 
     class Config:
         schema_extra = {
             "example": {
-                "company_location": {"lat": 59.860510, "lon": 30.211518},
+                "company_location": {"lon": 59.860510, "lat": 30.211518},
                 "transportation_type": "private_car",
                 "worker_and_salary": [
                     {"speciality": "worker_1", "salary": 45000},
                     {"speciality": "worker_2", "salary": 70000},
                 ],
+                "cell_size_meters": 500
             }
         }

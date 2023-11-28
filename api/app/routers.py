@@ -75,8 +75,7 @@ def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends(
 
 
 @router.post(
-    '/calculation/estimates',
-    response_model=schemas.EstimatesOut, tags=[Tags.estimates]
+    "/calculation/estimates", response_model=schemas.EstimatesOut, tags=[Tags.estimates]
 )
 def get_potential_estimates(query_params: schemas.EstimatesIn):
     result = func.get_potential_estimates(
@@ -90,8 +89,9 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
         }
 
 @router.post(
-    '/calculation/connection',
-    response_model=schemas.ConnectionsOut, tags=[Tags.connections]
+    "/calculation/connection",
+    response_model=schemas.ConnectionsOut,
+    tags=[Tags.connections],
 )
 def get_connections(query_params: schemas.ConnectionsIn):
     migration = func.get_city_migration_links(responses, cities, query_params.city)
@@ -130,9 +130,12 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         "private_car": G_drive,
     }
 
-    return main(
-        gdf_houses,
-        query_params.worker_and_salary,
-        graph_type[query_params.transportation_type],
-        query_params.company_location
+    result = main(
+        gdf_houses=gdf_houses,
+        worker_and_salary=query_params.worker_and_salary,
+        graph=graph_type[query_params.transportation_type],
+        company_location=query_params.company_location,
+        cell_size_meters=query_params.cell_size_meters,
     )
+
+    return result
