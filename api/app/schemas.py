@@ -1,8 +1,10 @@
 import app.enums as enums
+import json
 
 from pydantic import BaseModel, root_validator, conint
 from geojson_pydantic import FeatureCollection
 from typing import Optional, List, Dict
+
 
 class OntologyQueryParams:
     def __init__(
@@ -89,28 +91,51 @@ class EstimatesIn(BaseModel):
             }
         }
 
+
 class EstimatesOut(BaseModel):
     estimates: FeatureCollection    
     links: Optional[FeatureCollection]
 
 
-
 class ConnectionsIn(BaseModel):
-    specialists: List[int]
     city: str
 
     class Config:
         schema_extra = {
             "example": {
-                "specialists": [0, 1, 4, 8, 10, 11, 14, 16, 17, 18, 22],
                 "city": "Тюменская область, Тюмень"
             }
         }
+
 
 class ConnectionsOut(BaseModel):
     migration_link: FeatureCollection
     agglomeration_links: FeatureCollection
     agglomeration_nodes: FeatureCollection
+
+
+
+with open("app/data/estimates_sample.geojson") as f:
+    estimates_sample = json.load(f)
+
+# TODO: check the list of features and city names in estimates_table
+class PredictionIn(BaseModel):
+    city_name: str
+    estimates_table: FeatureCollection
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "city_name": "Тюменская область, Тюмень",
+                "estimates_table": estimates_sample
+            }
+        }
+
+
+class PredictionOut(BaseModel):
+    city_features: FeatureCollection
+    update_dict: dict
+    new_links: FeatureCollection
 
 
 class Workers(BaseModel):
