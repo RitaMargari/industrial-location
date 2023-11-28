@@ -412,12 +412,6 @@ def recalculate(cities, columns, city_name, DM, model):
     # create new migration links
     migration = responses_predict[responses_predict["cluster_center_cv"] != responses_predict["cluster_center_vacancy"]]
     migration = gpd.GeoDataFrame(migration)
-    migration['distance'] = migration['distance'].round(2)
-
-    cities_geometry = cities["geometry"]
-    migration["geometry"] = migration.apply(lambda x: LineString(
-        (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
-        ), axis=1)
 
     # recalculate num_in_migration
     num_vacancy = cities["vacancies_count_all"] # the total number of relevant vacancies in a city
@@ -430,6 +424,15 @@ def recalculate(cities, columns, city_name, DM, model):
     cities_update.loc[city_name, 'num_in_migration'] = num_in_migration
     cities_update.loc[city_name, 'one_vacancy_out_response'] = (num_in_migration / num_vacancy.loc[city_name]).round(3)
     # cities.loc[city_name, 'probability_to_move'] = num_out_migration / num_responses
+
+    cities_geometry = cities["geometry"]
+    migration["geometry"] = migration.apply(lambda x: LineString(
+        (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
+        ), axis=1)
+    
+    migration = migration.drop(['distance'], axis=1)
+    migration = migration[migration['responses'] != 0]
+    migration['direction'] = 'in'
     
     # rescale estimates
     scaler = MinMaxScaler()
@@ -465,7 +468,6 @@ Returns GeoDataFrame with initial estimate, GeoDataFrame with calculated migrati
 '''
 def get_response_no_changes(cities, cities_compare, city_name, responses):
 
-    YEAR = 2021
 
     city_update = cities.loc[[city_name]]
     estimate = float(cities['estimate'][city_name])
@@ -476,8 +478,8 @@ def get_response_no_changes(cities, cities_compare, city_name, responses):
             'after': {'estimate': estimate, 'in_migration': in_migration}
         }
     
-    responses_loc = responses[responses['year'] == YEAR]
-    migration = get_city_migration_links(responses_loc, cities_compare.reset_index(), city_name)
+    migration = get_city_migration_links(responses, cities_compare.reset_index(), city_name)
+    migration = migration[migration['direction'] == 'in']
     
     return city_update, update_dict, migration
 
