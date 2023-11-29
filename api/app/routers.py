@@ -2,8 +2,8 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import app.func as func
-from app.jhm_metric_calcs import main
-from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
+from app.jhm_metric_calcs.jhm_metric import main
+from app.routers_utils import validate_company_location, validate_workers_salary, download_intermodal_g_spb
 
 from fastapi import APIRouter, HTTPException, status, Body, Depends
 from fastapi.responses import StreamingResponse
@@ -26,10 +26,8 @@ vacancy = pd.read_parquet("app/data/vacancy.gzip")
 responses = pd.read_parquet("app/data/responses.gzip")
 cv = pd.read_parquet("app/data/cv.gzip")
 agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
+download_intermodal_g_spb()
 
-gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
-G_drive = nx.read_graphml("app/data/G_drive.graphml")
-G_intermodal = read_intermodal_G_from_gdrive()
 
 
 class Tags(str, enums.AutoName):
@@ -101,9 +99,15 @@ def get_potential_estimates(query_params: schemas.ConnectionsIn):
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
+
+    validate_company_location(query_params.company_location, query_params.city_name.value)
+    validate_workers_salary(query_params.worker_and_salary)
+
+    path = f"app/provisions_data/{query_params.city_name.value}_prov/"
+    gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
     graph_type = {
-        "public_transport": G_intermodal,
-        "private_car": G_drive,
+        "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
+        # "private_car":  nx.read_graphml(path + "G_drive.graphml"),
     }
 
     return main(
@@ -111,4 +115,5 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         query_params.worker_and_salary,
         graph_type[query_params.transportation_type],
         query_params.company_location,
+        query_params.cell_size
     )

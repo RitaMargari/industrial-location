@@ -120,18 +120,21 @@ class Workers(BaseModel):
 
 class JhmQueryParams(BaseModel):
     worker_and_salary: List[Workers]
+    city_name: enums.Cities
     transportation_type: enums.Transportation
     company_location: Dict[str, float]
-    filter_coef: Optional[bool] = True
+    cell_size: int
 
     class Config:
         schema_extra = {
             "example": {
-                "company_location": {"lat": 59.860510, "lon": 30.211518},
+                "company_location": {"lon": 59.860510, "lat": 30.211518},
+                "city_name": "saint-petersburg",
                 "transportation_type": "private_car",
                 "worker_and_salary": [
                     {"speciality": "worker_1", "salary": 45000},
                     {"speciality": "worker_2", "salary": 70000},
                 ],
+                "cell_size": 300
             }
         }
