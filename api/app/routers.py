@@ -132,7 +132,7 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
     gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
     graph_type = {
         "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
-        # "private_car":  nx.read_graphml(path + "G_drive.graphml"),
+        "private_car":  nx.read_graphml(path + "G_drive.graphml"),
     }
 
     result = main(
