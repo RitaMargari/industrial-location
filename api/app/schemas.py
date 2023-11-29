@@ -145,6 +145,7 @@ class Workers(BaseModel):
 
 class JhmQueryParams(BaseModel):
     worker_and_salary: List[Workers]
+    city_name: enums.Cities
     transportation_type: enums.Transportation
     company_location: Dict[str, float]
     cell_size_meters: conint(ge=300, lt=5_000) = 500

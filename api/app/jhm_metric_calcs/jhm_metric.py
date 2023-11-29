@@ -54,16 +54,18 @@ def calc_iq_coef(gdf_houses: gpd.GeoDataFrame, salary: int) -> gpd.GeoDataFrame:
     # which means we do not take accessibility time into account if workplace is close to home
     log_base = 10
     gdf_houses["accs_time"] = gdf_houses["accs_time"].apply(
-        lambda x: log_base if x < constants.MOST_COMFORTABLE_ACCS_TIME else x
+        lambda x: log_base if x < constants.MOST_COMFORTABLE_ACCS_TIME else round(x, 3)
     )
-    gdf_houses["log_accs_time"] = (np.log10(gdf_houses[["accs_time"]])).round(2)
 
-    gdf_houses["mean_price_rent"] = gdf_houses["mean_price_rent"].round(0)
-    gdf_houses["Iq"] = (gdf_houses["mean_price_rent"] / salary).round(2)
-    gdf_houses["Iq"] = (gdf_houses["Iq"] * gdf_houses["log_accs_time"]).round(2)
+    
+    gdf_houses["log_accs_time"] = (np.log10(gdf_houses[["accs_time"]])).round(3)
+
+    gdf_houses["price"] = gdf_houses["price"].round(0)
+    gdf_houses["Iq"] = (gdf_houses["price"] / salary).round(3)
+    gdf_houses["Iq"] = (gdf_houses["Iq"] * gdf_houses["log_accs_time"]).round(3)
 
     gdf_houses["Iq"] = gdf_houses["Iq"].apply(
-        lambda x: x if x <= 1 else constants.MAX_COEF_VALUE
+        lambda x: round(x, 3) if x <= 1 else constants.MAX_COEF_VALUE
     )
 
     gdf_houses["Iq"] = gdf_houses[["Iq", "accs_time"]].apply(
@@ -101,9 +103,10 @@ def invert_iq_coef(gdf_with_iq_coef: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def calc_avg_coef(gdf_houses: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf_houses["Idx"] = gdf_houses[["P_avg", "Iq"]].apply(
-        lambda x: x.mean()
-        if x["Iq"] > constants.LEAST_COMFORTABLE_IQ_COEF_VALUE
-        else 0,
+        lambda x: 0
+        if x["Iq"] < constants.LEAST_COMFORTABLE_IQ_COEF_VALUE \
+        or x["P_avg"] < constants.LEAST_COMFORTABLE_P_AVG_VALUE \
+        else x.mean(),
         axis=1,
     )
     return gdf_houses
@@ -179,6 +182,11 @@ def main(
             # filter gdf by jobs-housing match value
             mask = Iq_coef_worker["Iq"] >= constants.LEAST_COMFORTABLE_IQ_COEF_VALUE
             Iq_coef_worker = Iq_coef_worker[mask].copy()
+
+            if Iq_coef_worker.shape[0] == 0:
+                K4[f"{worker.speciality}_avg"] = 0
+                continue
+            
             gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
             gdfs_results[worker.speciality]["house_points"].to_crs(
                 constants.CRS_WGS84, inplace=True

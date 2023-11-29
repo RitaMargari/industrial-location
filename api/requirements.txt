@@ -13,3 +13,9 @@ pyproj==3.5.0
 pygeos
 requests==2.31.0
 uvicorn==0.23.2
+overpy==0.6
+osmnx 
+uvicorn
+requests
+osmnx
+gdown
