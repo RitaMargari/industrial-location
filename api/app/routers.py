@@ -31,6 +31,13 @@ gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
 G_drive = nx.read_graphml("app/data/G_drive.graphml")
 G_intermodal = read_intermodal_G_from_gdrive()
 
+cities = cities.rename(columns={
+        'vacancies_count_all': 'vacancy_count', 
+        'max_salary_all': 'max_salary',
+        'median_salary_all': 'median_salary',
+        'min_salary_all': 'min_salary'
+        })
+
 
 class Tags(str, enums.AutoName):
     def _generate_next_value_(name, start, count, last_values):
