@@ -6,6 +6,7 @@ import math
 import shapely
 import numpy as np
 import requests
+from app import constants
 
 
 def get_nx2_nk_idmap(G_nx):
@@ -130,7 +131,7 @@ def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoSeries):
 def _dissolve_by_grid(
     grid: gpd.GeoDataFrame,
     gdf: gpd.GeoDataFrame,
-    cols=["Iq"],
+    cols=['Iq', 'P_avg', 'Idx'],
     aggfunc: str = "mean",
     dropna: bool = True,
 ):
@@ -141,6 +142,13 @@ def _dissolve_by_grid(
     if dropna:
         grid.dropna(inplace=True)
     grid = grid.round(3)
+    grid[f'Idx_{aggfunc}'] = grid[[f'Iq_{aggfunc}', f'P_avg_{aggfunc}', f'Idx_{aggfunc}']].apply(
+        lambda x: 0
+        if x[f'Iq_{aggfunc}'] < constants.LEAST_COMFORTABLE_IQ_COEF_VALUE \
+        or x[f'P_avg_{aggfunc}'] < constants.LEAST_COMFORTABLE_P_AVG_VALUE \
+        else x[f'Idx_{aggfunc}'],
+        axis=1
+        )
     return grid
 
 
@@ -148,32 +156,17 @@ from shapely.geometry import box
 
 def create_grid(gdf, cols, cell_size_meters):
     xmin, ymin, xmax, ymax = gdf.total_bounds
-    # determine cell size in meters
-    xdist = xmax - xmin
-    n_cells = int(xdist / cell_size_meters)
-    cell_size = xdist / n_cells
     # projection of the grid
     crs = gdf.crs
     # create the cells in a loop
-    grid_cells = []
-    for x0 in np.arange(xmin, xmax + cell_size, cell_size):
-        for y0 in np.arange(ymin, ymax + cell_size, cell_size):
+    grid_cells = []    
+    for x0 in np.arange(xmin, xmax + cell_size_meters, cell_size_meters):
+        for y0 in np.arange(ymin, ymax + cell_size_meters, cell_size_meters):
             # bounds
-            x1 = x0 + cell_size
-            y1 = y0 - cell_size
+            x1 = x0 + cell_size_meters
+            y1 = y0 - cell_size_meters
             grid_cells.append(box(x0, y0, x1, y1))
     grid = gpd.GeoDataFrame(grid_cells, columns=["geometry"], crs=crs)
 
     grid = _dissolve_by_grid(grid, gdf, cols=cols, aggfunc="mean", dropna=True)
     return grid
-
-
-def read_intermodal_G_from_gdrive() -> nx.DiGraph:
-    # link to intermodal graph (without car transport type) to Gosha's private gdrive folder
-    url = 'https://drive.google.com/file/d/1vGGh1s7EIjxgGEF_0Dylb6XNBnCpApEQ/view?usp=sharing'
-    response = requests.get(url, timeout=300)
-    output = response.content
-
-    # Create nx graph object
-    graph = nx.read_adjlist(output.splitlines())
-    return graph

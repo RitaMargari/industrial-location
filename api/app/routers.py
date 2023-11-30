@@ -4,7 +4,7 @@ import geopandas as gpd
 import json
 import app.func as func
 from app.jhm_metric_calcs.jhm_metric import main
-from app.jhm_metric_calcs.utils import read_intermodal_G_from_gdrive
+from app.routers_utils import validate_company_location, validate_workers_salary, download_intermodal_g_spb
 
 from fastapi import APIRouter,  Depends
 from catboost import CatBoostRegressor
@@ -26,10 +26,9 @@ cv = pd.read_parquet("app/data/cv.gzip")
 agglomerations = pd.read_parquet("app/data/agglomerations.gzip") # TODO: replace to a new file
 DM = pd.read_parquet("app/data/DM.gzip")
 model = CatBoostRegressor().load_model(f"app/data/cat_model_dummies_40")
+agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
+download_intermodal_g_spb()
 
-gdf_houses = gpd.read_parquet("app/data/houses_price_demo.parquet")
-G_drive = nx.read_graphml("app/data/G_drive.graphml")
-G_intermodal = read_intermodal_G_from_gdrive()
 
 
 class Tags(str, enums.AutoName):
@@ -125,9 +124,15 @@ def predict_migration(query_params: schemas.PredictionIn):
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
+
+    validate_company_location(query_params.company_location, query_params.city_name.value)
+    validate_workers_salary(query_params.worker_and_salary)
+
+    path = f"app/provisions_data/{query_params.city_name.value}_prov/"
+    gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
     graph_type = {
-        "public_transport": G_intermodal,
-        "private_car": G_drive,
+        "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
+        "private_car":  nx.read_graphml(path + "G_drive.graphml"),
     }
 
     result = main(

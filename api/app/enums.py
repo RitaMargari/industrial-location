@@ -27,3 +27,9 @@ class WorkForce(str, Enum):
 class Transportation(str, Enum):
     PRIVATE_CAR = 'private_car'
     PUBLIC_TRANSPORT = 'public_transport',
+
+class Cities(str, Enum):
+    SAINT_PETERSBURG = 'saint-petersburg'
+    TOMSK = 'tomsk'
+    PERM = 'perm'
+    SHAKHTY = 'shakhty'
