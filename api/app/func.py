@@ -111,7 +111,6 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
         # get estimates based on the number of open resumes of relevant specialists
         cities = estimate_cv(cv_loc, cities, specialities)
 
-    
     # get estimates based on observed pseudo migration (responses stat)
     cities = estimate_migration(cities)
 
@@ -356,9 +355,9 @@ def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: Da
         "ueqi_social_and_leisure_infrastructure",
         "ueqi_citywide_space",
         "cvs_count_all",
-        "vacancies_count_all",
+        "vacancy_count",
         "factories_total",
-        'median_salary_all'
+        'median_salary'
         ]
 
     # check if there is any changes in cities' stats
@@ -398,7 +397,7 @@ def recalculate(cities, columns, city_name, DM, model):
 
     # form an input vecor x
     responses_predict['x'] = list(np.concatenate((
-        cities_features.loc[list(responses_predict['cluster_center_cv'])].drop(['vacancies_count_all'], axis=1).to_numpy(), 
+        cities_features.loc[list(responses_predict['cluster_center_cv'])].drop(['vacancy_count'], axis=1).to_numpy(), 
         cities_features.loc[list(responses_predict['cluster_center_vacancy'])].drop(['cvs_count_all'], axis=1).to_numpy(), 
         responses_predict['distance'].astype('float').round(3).to_numpy().reshape(len(responses_predict), 1)
         ), axis=1))
@@ -414,7 +413,7 @@ def recalculate(cities, columns, city_name, DM, model):
     migration = gpd.GeoDataFrame(migration)
 
     # recalculate num_in_migration
-    num_vacancy = cities["vacancies_count_all"] # the total number of relevant vacancies in a city
+    num_vacancy = cities["vacancy_count"] # the total number of relevant vacancies in a city
     num_in_migration = migration[migration["cluster_center_vacancy"] == city_name].set_index("cluster_center_cv")["responses"].sum() 
 
     # num_responses = cities["num_responses"] # the total number of responses on vacancies in a city
