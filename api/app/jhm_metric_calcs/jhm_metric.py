@@ -9,7 +9,7 @@ import json
 from geojson_pydantic import FeatureCollection
 from collections import defaultdict
 import numpy as np
-from ..jhm_metric_calcs import constants
+from  app import constants
 
 
 def calc_accs_via_spsp(

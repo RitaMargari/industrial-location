@@ -17,3 +17,4 @@ uvicorn==0.23.2
 overpy==0.6
 osmnx==1.7.1
 gdown==4.7.1
+catboost==1.2.2
