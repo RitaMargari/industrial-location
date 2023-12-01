@@ -154,7 +154,7 @@ class JhmQueryParams(BaseModel):
         schema_extra = {
             "example": {
                 "city_name": "saint-petersburg",
-                "company_location": {"lon": 59.860510, "lat": 30.211518},
+                "company_location": {"lat": 59.860510, "lon": 30.211518},
                 "transportation_type": "private_car",
                 "worker_and_salary": [
                     {"speciality": "worker_1", "salary": 80000},
