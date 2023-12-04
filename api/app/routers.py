@@ -132,10 +132,17 @@ def predict_migration(query_params: schemas.PredictionIn):
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
 
-    validate_company_location(query_params.company_location, query_params.city_name.value)
+    map_city_name = {
+        'Санкт-Петербург': 'saint-petersburg',
+        'Шахты': 'shakhty',
+        'Пермь': 'perm',
+        'Томск': 'tomsk'
+    }
+
+    validate_company_location(query_params.company_location, map_city_name[query_params.city_name.value])
     validate_workers_salary(query_params.worker_and_salary)
 
-    path = f"app/provisions_data/{query_params.city_name.value}_prov/"
+    path = f"app/provisions_data/{map_city_name[query_params.city_name.value]}_prov/"
     gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
     graph_type = {
         "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
