@@ -134,7 +134,6 @@ class PredictionIn(BaseModel):
 
 class PredictionOut(BaseModel):
     city_features: FeatureCollection
-    update_dict: dict
     new_links: FeatureCollection
 
 

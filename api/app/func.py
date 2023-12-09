@@ -363,16 +363,12 @@ def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: Da
     # check if there is any changes in cities' stats
     if cities_compare[columns].loc[cities.index].equals(cities[columns]):
         # if there is no changes, return initial table 
-        city_update, update_dict, migration = get_response_no_changes(cities, cities_compare, city_name, responses)
+        city_update, migration = get_response_no_changes(cities, cities_compare, city_name, responses)
     else:
         # if there are some changes, recalculate num_in_migration and estimate for the selected city 
-        city_update, update_dict, migration = recalculate(cities, columns, city_name, DM, model)
+        city_update, migration = recalculate(cities, columns, city_name, DM, model)
 
-    return {
-        'city_features': city_update, 
-        'update_dict': update_dict, 
-        'new_links': migration
-        }
+    return {'city_features': city_update, 'new_links': migration}
 
 
 '''
@@ -454,12 +450,13 @@ def recalculate(cities, columns, city_name, DM, model):
         ).fillna(0).round(3)
     
     city_update = cities_update.loc[[city_name]]
-    update_dict = {
-        'before': {'estimate': float(cities['estimate'][city_name]), 'in_migration': int(cities['num_in_migration'][city_name])},
-        'after': {'estimate': float(city_update['estimate'][city_name]), 'in_migration': int(city_update['num_in_migration'][city_name])}
-        }
+    city_update = city_update.rename(
+        columns={'estimate': 'estimate_after', 'num_in_migration': 'num_in_migration_after'}
+        )
+    city_update['estimate_before'] = [cities['estimate'][city_name]]
+    city_update['num_in_migration_before'] = [cities['num_in_migration'][city_name]]
     
-    return city_update, update_dict, migration.drop(['x'], axis=1)
+    return city_update, migration.drop(['x'], axis=1)
 
 
 '''
@@ -467,20 +464,17 @@ Returns GeoDataFrame with initial estimate, GeoDataFrame with calculated migrati
 '''
 def get_response_no_changes(cities, cities_compare, city_name, responses):
 
-
     city_update = cities.loc[[city_name]]
-    estimate = float(cities['estimate'][city_name])
-    in_migration = int(cities['num_in_migration'][city_name])
+    city_update = city_update.rename(
+        columns={'estimate': 'estimate_after', 'num_in_migration': 'num_in_migration_after'}
+        )
+    city_update['estimate_before'] = city_update['estimate_after']
+    city_update['num_in_migration_before'] = city_update['num_in_migration_after']
 
-    update_dict = {
-            'before': {'estimate': estimate, 'in_migration': in_migration},
-            'after': {'estimate': estimate, 'in_migration': in_migration}
-        }
-    
     migration = get_city_migration_links(responses, cities_compare.reset_index(), city_name)
     migration = migration[migration['direction'] == 'in']
     
-    return city_update, update_dict, migration
+    return city_update, migration
 
 
 '''

@@ -124,7 +124,6 @@ def predict_migration(query_params: schemas.PredictionIn):
 
     return {
         "city_features": json.loads(result['city_features'].to_json()), 
-        "update_dict": result["update_dict"], 
         "new_links": json.loads(result["new_links"].to_json())
         }
 
