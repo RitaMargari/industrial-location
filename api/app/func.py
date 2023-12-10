@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-import json
+import shap
+import io
 
 from typing import Optional
+from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
 from catboost import Pool
@@ -338,8 +340,8 @@ Returns:
         city_name (str) - name of the selected city
 '''
 
-def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: DataFrame, model, 
-                      cities: GeoDataFrame, city_name: str):
+def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: DataFrame, model, shap_values,
+                      cities: GeoDataFrame, city_name: str, plot=False):
 
     cities = cities.set_index("region_city")
     cities_compare = cities_compare.set_index("region_city")
@@ -363,18 +365,18 @@ def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: Da
     # check if there is any changes in cities' stats
     if cities_compare[columns].loc[cities.index].equals(cities[columns]):
         # if there is no changes, return initial table 
-        city_update, migration = get_response_no_changes(cities, cities_compare, city_name, responses)
+        city_update, migration, svg_plot = get_response_no_changes(cities, cities_compare, city_name, responses, shap_values, plot)
     else:
         # if there are some changes, recalculate num_in_migration and estimate for the selected city 
-        city_update, migration = recalculate(cities, columns, city_name, DM, model)
+        city_update, migration, svg_plot = recalculate(cities, columns, city_name, DM, model, shap_values, plot)
 
-    return {'city_features': city_update, 'new_links': migration}
+    return {'city_features': city_update, 'new_links': migration, 'plot': svg_plot}
 
 
 '''
 Returns GeoDataFrame with recalculated estimate, GeoDataFrame with recalculated migration links and dict with changes
 '''
-def recalculate(cities, columns, city_name, DM, model): 
+def recalculate(cities, columns, city_name, DM, model, shap_values, plot): 
 
     # prepare features for the model
     cities_features = decode_features(cities, columns)
@@ -455,14 +457,20 @@ def recalculate(cities, columns, city_name, DM, model):
         )
     city_update['estimate_before'] = [cities['estimate'][city_name]]
     city_update['num_in_migration_before'] = [cities['num_in_migration'][city_name]]
+
+    if plot: 
+        updated_shap_values = explain(responses_predict['x'], shap_values, model)
+        svg_plot = plot_local_waterfall(updated_shap_values)
+    else:
+        svg_plot = None
     
-    return city_update, migration.drop(['x'], axis=1)
+    return city_update, migration.drop(['x'], axis=1), svg_plot
 
 
 '''
 Returns GeoDataFrame with initial estimate, GeoDataFrame with calculated migration links and dict with no changes
 '''
-def get_response_no_changes(cities, cities_compare, city_name, responses):
+def get_response_no_changes(cities, cities_compare, city_name, responses, shap_values, plot):
 
     city_update = cities.loc[[city_name]]
     city_update = city_update.rename(
@@ -473,8 +481,14 @@ def get_response_no_changes(cities, cities_compare, city_name, responses):
 
     migration = get_city_migration_links(responses, cities_compare.reset_index(), city_name)
     migration = migration[migration['direction'] == 'in']
+
+    if plot:
+        shap_values_slice = shap_values[shap_values.cities_destination == city_name]
+        svg_plot = plot_local_waterfall(shap_values_slice)
+    else:
+        svg_plot = None
     
-    return city_update, migration
+    return city_update, migration, svg_plot
 
 
 '''
@@ -491,3 +505,25 @@ def decode_features(df, columns):
     df_features = df_features.drop(["city_category"], axis=1)
     df_features["harsh_climate"] = df_features["harsh_climate"].astype(int)
     return df_features
+
+def explain(new_features, shap_values, model):
+
+    new_features = pd.DataFrame(
+        list(new_features.to_numpy()), 
+        columns= shap_values.features_name
+        )
+    
+    explainer = shap.TreeExplainer(model)
+    updated_shap_values = explainer(new_features)
+
+    return updated_shap_values
+
+def plot_local_waterfall(shap_values):
+
+    shap.plots.waterfall(shap_values[:, 14:24].mean(0))
+    svg_buffer = io.StringIO()
+    plt.savefig(svg_buffer, format='svg', bbox_inches='tight')
+    svg_buffer.seek(0) 
+    svg_string = svg_buffer.getvalue()
+
+    return svg_string
