@@ -2,9 +2,11 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import json
+import joblib as jbl
 import app.func as func
 from app.jhm_metric_calcs.jhm_metric import main
 from app.routers_utils import validate_company_location, validate_workers_salary, download_intermodal_g_spb
+from fastapi.responses import JSONResponse
 
 from fastapi import APIRouter,  Depends
 from catboost import CatBoostRegressor
@@ -29,6 +31,9 @@ model = CatBoostRegressor().load_model(f"app/data/cat_model_dummies_40")
 agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
 download_intermodal_g_spb()
 
+with open('app/shap_plots/explanation.joblib', 'rb') as f:
+    shap_values = jbl.load(f)
+    
 
 cities = cities.rename(columns={
         'vacancies_count_all': 'vacancy_count', 
@@ -48,6 +53,7 @@ class Tags(str, enums.AutoName):
     estimates = auto()
     connections = auto()
     prediction = auto()
+    plots = auto()
     jhm_metric = auto()
 
 
@@ -119,13 +125,30 @@ def predict_migration(query_params: schemas.PredictionIn):
     estimates_table = query_params.estimates_table.dict()
     estimates_table = gpd.GeoDataFrame.from_features(estimates_table['features'])
     result = func.predict_migration(
-        cities, responses, DM, model, estimates_table, query_params.city_name
+        cities, responses, DM, model, shap_values, estimates_table, query_params.city_name, query_params.plot
         )
 
     return {
         "city_features": json.loads(result['city_features'].to_json()), 
-        "new_links": json.loads(result["new_links"].to_json())
-        }
+        "new_links": json.loads(result["new_links"].to_json()),
+        "plot": result["plot"]}
+
+
+@router.get('/calculation/plots', tags=[Tags.plots])
+def send_plots():
+    svg_files = [
+        'app/shap_plots/plots/largest.svg',
+        'app/shap_plots/plots/large.svg',
+        'app/shap_plots/plots/big.svg',
+        'app/shap_plots/plots/average.svg',
+        'app/shap_plots/plots/small.svg'
+                 ]
+    
+    svgs = {}
+    for file in svg_files:
+        with open(file, 'r') as f:
+            svgs[file.split('/')[-1].split('.')[0]] = f.read()
+    return JSONResponse(svgs)
 
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
