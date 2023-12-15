@@ -2,8 +2,10 @@ import faulthandler
 import pandas as pd
 import geopandas as gpd
 import json
+import networkx as nx
 import joblib as jbl
 import app.func as func
+
 from app.jhm_metric_calcs.jhm_metric import main
 from app.routers_utils import validate_company_location, validate_workers_salary, download_intermodal_g_spb
 from fastapi.responses import JSONResponse
@@ -13,28 +15,32 @@ from catboost import CatBoostRegressor
 
 from enum import auto
 from app import enums, schemas
-import networkx as nx
+from shapely import wkt
 
 
 router = APIRouter()
 faulthandler.enable()
 
+# Data loading
 ontology = pd.read_csv("app/data/ontology.csv", index_col=0)
-graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
-cities = gpd.read_file("app/data/cities.geojson", index_col=0)
-vacancy = pd.read_parquet("app/data/vacancy.gzip")
-responses = pd.read_parquet("app/data/responses.gzip")
+
 cv = pd.read_parquet("app/data/cv.gzip")
-agglomerations = pd.read_parquet("app/data/agglomerations.gzip") # TODO: replace to a new file
+graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
+vacancy = pd.read_parquet("app/data/vacancy.gzip")
+cities = gpd.read_file("app/data/cities.geojson", index_col=0)
+
+responses = pd.read_parquet("app/data/responses_all.gzip")
+agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
+
 DM = pd.read_parquet("app/data/DM.gzip")
 model = CatBoostRegressor().load_model(f"app/data/cat_model_dummies_40")
-agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
-download_intermodal_g_spb()
-
 with open('app/shap_plots/explanation.joblib', 'rb') as f:
     shap_values = jbl.load(f)
-    
 
+download_intermodal_g_spb()  
+
+# Data preprocessing
+agglomerations["coordinates"] = agglomerations["coordinates"].apply(wkt.loads)
 cities = cities.rename(columns={
         'vacancies_count_all': 'vacancy_count', 
         'max_salary_all': 'max_salary',
