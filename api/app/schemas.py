@@ -122,11 +122,13 @@ with open("app/data/estimates_sample.geojson") as f:
 class PredictionIn(BaseModel):
     city_name: str
     estimates_table: FeatureCollection
+    plot: bool
 
     class Config:
         schema_extra = {
             "example": {
                 "city_name": "Тюменская область, Тюмень",
+                "plot": False,
                 "estimates_table": estimates_sample
             }
         }
@@ -134,8 +136,8 @@ class PredictionIn(BaseModel):
 
 class PredictionOut(BaseModel):
     city_features: FeatureCollection
-    update_dict: dict
     new_links: FeatureCollection
+    plot: Optional[str]
 
 
 class Workers(BaseModel):
