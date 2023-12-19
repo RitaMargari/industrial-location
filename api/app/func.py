@@ -431,18 +431,22 @@ def recalculate(cities, columns, city_name, DM, model, shap_values, plot):
     
     # rescale estimates
     scaler = MinMaxScaler()
-    column_norm = ["cv_count_weighted_sum", "graduates_weighted_sum", "probability_to_move", "one_vacancy_out_response"]
+    column_norm = ["probability_to_move", "one_vacancy_out_response"]
+    for column in ["cv_count_weighted_sum", "graduates_weighted_sum"]: 
+        if column in cities_update.columns: column_norm.append(column)
+
     migration_estinate = pd.DataFrame(
         scaler.fit_transform(np.log(cities_update[column_norm].abs().to_numpy() + 10e-06)),
         index=cities_update.index, columns=column_norm
     )
 
-    cities_update["estimate"] = 0
-    cities_update["estimate"] = migration_estinate['cv_count_weighted_sum'] \
-                        + migration_estinate['graduates_weighted_sum'] \
-                        + migration_estinate["one_vacancy_out_response"] \
-                        - migration_estinate["probability_to_move"]
+    migration_estinate['probability_to_move'] *= -1 # negative influence on estimate
 
+    cities_update["estimate"] = 0
+
+    for column in column_norm:
+        cities_update["estimate"] += migration_estinate[column]
+        
     scaler = MinMaxScaler()
     cities_update["estimate"] = pd.Series(
         scaler.fit_transform(np.expand_dims(cities_update["estimate"].to_numpy(), 1)).squeeze(),
