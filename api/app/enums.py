@@ -29,7 +29,7 @@ class Transportation(str, Enum):
     PUBLIC_TRANSPORT = 'public_transport',
 
 class Cities(str, Enum):
-    SAINT_PETERSBURG = 'saint-petersburg'
-    TOMSK = 'tomsk'
-    PERM = 'perm'
-    SHAKHTY = 'shakhty'
+    SAINT_PETERSBURG = 'Санкт-Петербург'
+    TOMSK = 'Томск'
+    PERM = 'Пермь'
+    SHAKHTY = 'Шахты'
