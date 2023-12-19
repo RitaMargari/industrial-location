@@ -12,6 +12,7 @@ from catboost import Pool
 from pandas.core.frame import DataFrame
 from geopandas.geodataframe import GeoDataFrame
 from shapely.geometry import LineString
+from shapely import wkt
 
 
 '''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
@@ -138,16 +139,16 @@ based on the information about graduates
 '''
 def estimate_graduates(graduates: DataFrame, cities: GeoDataFrame, edu_groups: DataFrame):
             
-        graduates = pd.DataFrame(graduates.groupby(["cluster_center", "type", "edu_group_code"])["graduates_forecast"].sum())
+        graduates = pd.DataFrame(graduates.groupby(["region_city", "type", "edu_group_code"])["graduates_forecast"].sum())
         graduates = graduates.join(edu_groups, on=["type", "edu_group_code"]).dropna(subset=["weights"])
-        graduates = graduates.reset_index().set_index(["cluster_center", "edu_group"])
+        graduates = graduates.reset_index().set_index(["region_city", "edu_group"])
         graduates["graduates_weighted"] = graduates["graduates_forecast"] * graduates["weights"]
 
-        graduates_cities_gr = graduates.groupby(["cluster_center"])
+        graduates_cities_gr = graduates.groupby(["region_city"])
         graduates_cities = graduates_cities_gr[["graduates_forecast", "graduates_weighted"]].sum().add_suffix("_sum")
 
         graduates_cities["graduates_forecast"] = graduates_cities_gr.apply(
-            lambda x: x["graduates_forecast"].droplevel("cluster_center").to_dict()
+            lambda x: x["graduates_forecast"].droplevel("region_city").to_dict()
             )
 
         graduates_cities["graduates_forecast"] = graduates_cities["graduates_forecast"].apply(lambda x: str(x) if x else x)
@@ -278,7 +279,7 @@ def get_city_migration_links(responses: DataFrame, cities: GeoDataFrame, city_se
     cities_geometry = cities["geometry"]
 
     responses_loc = responses[responses['year'] == YEAR]
-    responses_loc = responses_loc[responses_loc["cluster_center_cv"] != responses_loc["cluster_center_vacancy"]]
+    responses_loc = responses[responses["cluster_center_cv"] != responses["cluster_center_vacancy"]]
     responses_loc = responses_loc[
         (responses_loc["cluster_center_cv"] == city_selected) | 
         (responses_loc["cluster_center_vacancy"]== city_selected)
@@ -316,6 +317,7 @@ def get_city_agglomeration_links(agglomerations: DataFrame, cities: DataFrame, c
     aggl_loc = aggl_loc[aggl_loc["cluster_city"] != aggl_loc["cluster_center"]]
 
     city_coord = cities_geometry.loc[city_selected]
+    aggl_loc["coordinates"] = aggl_loc["coordinates"].apply(wkt.loads)
     aggl_loc["geometry"] = aggl_loc["coordinates"].apply(lambda x: LineString((x, city_coord)))
 
     aggl_links = gpd.GeoDataFrame(aggl_loc[["cluster_city", "cluster_center", "geometry"]])
@@ -431,22 +433,18 @@ def recalculate(cities, columns, city_name, DM, model, shap_values, plot):
     
     # rescale estimates
     scaler = MinMaxScaler()
-    column_norm = ["probability_to_move", "one_vacancy_out_response"]
-    for column in ["cv_count_weighted_sum", "graduates_weighted_sum"]: 
-        if column in cities_update.columns: column_norm.append(column)
-
+    column_norm = ["cv_count_weighted_sum", "graduates_weighted_sum", "probability_to_move", "one_vacancy_out_response"]
     migration_estinate = pd.DataFrame(
         scaler.fit_transform(np.log(cities_update[column_norm].abs().to_numpy() + 10e-06)),
         index=cities_update.index, columns=column_norm
     )
 
-    migration_estinate['probability_to_move'] *= -1 # negative influence on estimate
-
     cities_update["estimate"] = 0
+    cities_update["estimate"] = migration_estinate['cv_count_weighted_sum'] \
+                        + migration_estinate['graduates_weighted_sum'] \
+                        + migration_estinate["one_vacancy_out_response"] \
+                        - migration_estinate["probability_to_move"]
 
-    for column in column_norm:
-        cities_update["estimate"] += migration_estinate[column]
-        
     scaler = MinMaxScaler()
     cities_update["estimate"] = pd.Series(
         scaler.fit_transform(np.expand_dims(cities_update["estimate"].to_numpy(), 1)).squeeze(),
