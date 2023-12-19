@@ -122,11 +122,13 @@ with open("app/data/estimates_sample.geojson") as f:
 class PredictionIn(BaseModel):
     city_name: str
     estimates_table: FeatureCollection
+    plot: bool
 
     class Config:
         schema_extra = {
             "example": {
                 "city_name": "Тюменская область, Тюмень",
+                "plot": False,
                 "estimates_table": estimates_sample
             }
         }
@@ -134,8 +136,8 @@ class PredictionIn(BaseModel):
 
 class PredictionOut(BaseModel):
     city_features: FeatureCollection
-    update_dict: dict
     new_links: FeatureCollection
+    plot: Optional[str]
 
 
 class Workers(BaseModel):
@@ -154,7 +156,7 @@ class JhmQueryParams(BaseModel):
         schema_extra = {
             "example": {
                 "city_name": "saint-petersburg",
-                "company_location": {"lon": 59.860510, "lat": 30.211518},
+                "company_location": {"lat": 59.860510, "lon": 30.211518},
                 "transportation_type": "private_car",
                 "worker_and_salary": [
                     {"speciality": "worker_1", "salary": 80000},

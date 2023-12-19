@@ -27,7 +27,7 @@ def validate_company_location(coords_dict: Dict[str, float], city_name: str):
     )
     # Check if the coordinates are within the city boundary
     if not boundary_gdf.intersects(
-        Point(coords_dict["lat"], coords_dict["lon"])
+        Point(coords_dict["lon"], coords_dict["lat"])
     ).item():
         # Raise a custom exception to indicate user's fault
         detail = "Invalid coordinates provided. Please provide valid x and y coordinates within the city boundary."

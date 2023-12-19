@@ -9,7 +9,7 @@ import json
 from geojson_pydantic import FeatureCollection
 from collections import defaultdict
 import numpy as np
-from ..jhm_metric_calcs import constants
+from  app import constants
 
 
 def calc_accs_via_spsp(
@@ -80,10 +80,10 @@ def calc_iq_coef(gdf_houses: gpd.GeoDataFrame, salary: int) -> gpd.GeoDataFrame:
 
 def convert_wgs_point_to_utm_geoseries(company_location_dict: dict) -> gpd.GeoSeries:
     local_crs = utils.convert_wgs_to_utm(
-        lon=company_location_dict["lat"], lat=company_location_dict["lon"]
+        lon=company_location_dict["lon"], lat=company_location_dict["lat"]
     )
     company_location = gpd.GeoSeries(
-        Point(company_location_dict["lat"], company_location_dict["lon"]),
+        Point(company_location_dict["lon"], company_location_dict["lat"]),
         crs=constants.CRS_WGS84,
     ).to_crs(local_crs)
 
