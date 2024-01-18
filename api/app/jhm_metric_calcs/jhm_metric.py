@@ -78,10 +78,7 @@ def calc_iq_coef(gdf_houses: gpd.GeoDataFrame, salary: int) -> gpd.GeoDataFrame:
     return gdf_houses
 
 
-def convert_wgs_point_to_utm_geoseries(company_location_dict: dict) -> gpd.GeoSeries:
-    local_crs = utils.convert_wgs_to_utm(
-        lon=company_location_dict["lon"], lat=company_location_dict["lat"]
-    )
+def convert_wgs_point_to_utm_geoseries(company_location_dict: dict, local_crs) -> gpd.GeoSeries:
     company_location = gpd.GeoSeries(
         Point(company_location_dict["lon"], company_location_dict["lat"]),
         crs=constants.CRS_WGS84,
@@ -116,9 +113,9 @@ def calc_jhm_main(
     G: nx.DiGraph,
     gdf_houses: gpd.GeoDataFrame,
     company_location: Dict[str, float],
-    salary: int,
+    salary: int,local_crs
 ) -> FeatureCollection:
-    company_location = convert_wgs_point_to_utm_geoseries(company_location)
+    company_location = convert_wgs_point_to_utm_geoseries(company_location, local_crs)
 
     res = (
         get_accs_time_to_work(G, gdf_houses, company_location)
@@ -154,6 +151,10 @@ def main(
     )  # avg estimation on total workers' comfortability regarding to the enterprise location
     K4 = defaultdict(float)
 
+    local_crs = int(graph.graph['crs'].split('epsg:')[1])
+    if gdf_houses.crs.to_epsg() == constants.CRS_WGS84:
+        gdf_houses.to_crs(local_crs, inplace=True)
+
     provision_columns = [col for col in gdf_houses.columns if "P_" in col]
     for col in provision_columns:
         K2[f"{col}_avg_all_houses"] = round(gdf_houses.loc[:, col].mean(), 2)
@@ -163,7 +164,7 @@ def main(
             G=graph,
             gdf_houses=gdf_houses,
             company_location=company_location,
-            salary=worker.salary,
+            salary=worker.salary,local_crs=local_crs
         )
 
         if Iq_coef_worker.shape[0] > 1:
@@ -185,12 +186,14 @@ def main(
 
             if Iq_coef_worker.shape[0] == 0:
                 K4[f"{worker.speciality}_avg"] = 0
+                utils.raise_empty_geometry_speciality(worker.speciality)
                 continue
             
             gdfs_results[worker.speciality]["house_points"] = Iq_coef_worker.copy()
             gdfs_results[worker.speciality]["house_points"].to_crs(
                 constants.CRS_WGS84, inplace=True
             )
+
             gdfs_results[worker.speciality]["house_points"] = gdfs_results[worker.speciality]["house_points"].to_json()
             
 
@@ -209,6 +212,8 @@ def main(
             )
 
         else:
+            utils.raise_empty_geometry_speciality(worker.speciality)
+
             # 0.01 is the least possible value
             # it indicates that there are no suitable houses to live comfortably
             for col in provision_columns:

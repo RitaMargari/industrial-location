@@ -152,3 +152,7 @@ working_files/
 note.ipynb
 
 venv
+.venv
+
+/api/app/shap_plots/explanation.joblib
+/api/app/provisions_data/saint-petersburg_prov/G_intermodal.graphml
