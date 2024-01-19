@@ -130,6 +130,43 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
     cities = cities.reset_index()
+
+    print(cities.columns)
+
+    if 'graduates_forecast_sum_number' in cities.columns and 'specialists_sum_number' in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", "graduates_forecast_sum_number", "graduates_forecast_number", \
+                    "specialists_sum_number", "specialists_number", "harsh_climate", 'geometry']
+        
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+        
+    elif 'graduates_forecast_sum_number' in cities.columns and 'specialists_sum_number' not in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", "graduates_forecast_sum_number", "graduates_forecast_number", \
+                    "harsh_climate", 'geometry']
+        
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+        
+    elif 'graduates_forecast_sum_number' not  in cities.columns and 'specialists_sum_number' in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", \
+                    "specialists_sum_number", "specialists_number", "harsh_climate", "geometry"]
+
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+
+    
         
     return  {"estimates": cities, "links": links_json}
 

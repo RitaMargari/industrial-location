@@ -114,6 +114,7 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
         workforce_type = query_params.workforce_type, specialities=query_params.specialities, 
         edu_groups=query_params.edu_groups, links_output=query_params.links_output
         )
+
     return {
         'estimates': json.loads(result['estimates'].to_json()),
         'links': json.loads(result['links'].to_json()) if not None else links_json
