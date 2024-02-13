@@ -6,8 +6,25 @@ import networkx as nx
 import joblib as jbl
 import app.func as func
 
+
 from app.jhm_metric_calcs.jhm_metric import main
-from app.routers_utils import validate_company_location, validate_workers_salary, download_intermodal_g_spb
+from app.routers_utils import (
+    validate_company_location,
+    validate_workers_salary
+)
+
+from app.data_reader import (
+    ontology,
+    graduates,
+    cities,
+    vacancy,
+    responses,
+    cv,
+    agglomerations,
+    DM,
+    model,
+    data_provisions,
+)
 from fastapi.responses import JSONResponse
 
 from fastapi import APIRouter,  Depends
@@ -21,26 +38,22 @@ from shapely import wkt
 router = APIRouter()
 faulthandler.enable()
 
-# Data loading
-ontology = pd.read_csv("app/data/ontology.csv", index_col=0)
+# ontology = pd.read_csv("app/data/ontology.csv", index_col=0)
+# graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
+# cities = gpd.read_file("app/data/cities.geojson", index_col=0)
+# vacancy = pd.read_parquet("app/data/vacancy.gzip")
+# responses = pd.read_parquet("app/data/responses.gzip")
+# cv = pd.read_parquet("app/data/cv.gzip")
+# agglomerations = pd.read_parquet("app/data/agglomerations.gzip") # TODO: replace to a new file
+# DM = pd.read_parquet("app/data/DM.gzip")
+# model = CatBoostRegressor().load_model(f"app/data/cat_model_dummies_40")
+# agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
+# download_intermodal_g_spb()
 
-cv = pd.read_parquet("app/data/cv.gzip")
-graduates = pd.read_csv("app/data/graduates.csv", index_col=0)
-vacancy = pd.read_parquet("app/data/vacancy.gzip")
-cities = gpd.read_file("app/data/cities.geojson", index_col=0)
-
-responses = pd.read_parquet("app/data/responses_all.gzip")
-agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
-
-DM = pd.read_parquet("app/data/DM.gzip")
-model = CatBoostRegressor().load_model(f"app/data/cat_model_dummies_40")
 with open('app/shap_plots/explanation.joblib', 'rb') as f:
     shap_values = jbl.load(f)
+    
 
-download_intermodal_g_spb()  
-
-# Data preprocessing
-agglomerations["coordinates"] = agglomerations["coordinates"].apply(wkt.loads)
 cities = cities.rename(columns={
         'vacancies_count_all': 'vacancy_count', 
         'max_salary_all': 'max_salary',
@@ -101,6 +114,7 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
         workforce_type = query_params.workforce_type, specialities=query_params.specialities, 
         edu_groups=query_params.edu_groups, links_output=query_params.links_output
         )
+
     return {
         'estimates': json.loads(result['estimates'].to_json()),
         'links': json.loads(result['links'].to_json()) if not None else links_json
@@ -115,6 +129,12 @@ def get_connections(query_params: schemas.ConnectionsIn):
     migration = func.get_city_migration_links(responses, cities, query_params.city)
     agglomeration = func.get_city_agglomeration_links(agglomerations, cities, query_params.city)
 
+    # print(agglomeration["nodes"])
+    # print(agglomeration["nodes"].columns)
+    # print(type(agglomeration["nodes"]))
+    # print(agglomeration["links"])
+    # print(agglomeration["links"].columns)
+    # print(type(agglomeration["links"]))
     return {
         "migration_link": json.loads(migration.to_json()), 
         "agglomeration_links": json.loads(agglomeration["links"].to_json()), 
@@ -159,28 +179,18 @@ def send_plots():
 
 @router.post("/metrics/get_jhm_metric", response_model=dict, tags=[Tags.jhm_metric])
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
+    # city_name = map_city_name(query_params.city_name.value)
 
-    map_city_name = {
-        'Санкт-Петербург': 'saint-petersburg',
-        'Шахты': 'shakhty',
-        'Пермь': 'perm',
-        'Томск': 'tomsk'
-    }
-
-    validate_company_location(query_params.company_location, map_city_name[query_params.city_name.value])
+    validate_company_location(
+        query_params.company_location, query_params.city_name.value
+    )
     validate_workers_salary(query_params.worker_and_salary)
-
-    path = f"app/provisions_data/{map_city_name[query_params.city_name.value]}_prov/"
-    gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
-    graph_type = {
-        "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
-        "private_car":  nx.read_graphml(path + "G_drive.graphml"),
-    }
+    
 
     result = main(
-        gdf_houses=gdf_houses,
+        gdf_houses=data_provisions[query_params.city_name.value]["gdf_houses"],
         worker_and_salary=query_params.worker_and_salary,
-        graph=graph_type[query_params.transportation_type],
+        graph=data_provisions[query_params.city_name.value][query_params.transportation_type],
         company_location=query_params.company_location,
         cell_size_meters=query_params.cell_size_meters,
     )

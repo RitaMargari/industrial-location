@@ -12,6 +12,8 @@ from catboost import Pool
 from pandas.core.frame import DataFrame
 from geopandas.geodataframe import GeoDataFrame
 from shapely.geometry import LineString
+from shapely.wkt import loads
+from loguru import logger
 
 
 '''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
@@ -128,6 +130,43 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     cities = cities.sort_values(by="estimate", ascending=False)
     cities["estimate"] = cities["estimate"].round(3)
     cities = cities.reset_index()
+
+    print(cities.columns)
+
+    if 'graduates_forecast_sum_number' in cities.columns and 'specialists_sum_number' in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", "graduates_forecast_sum_number", "graduates_forecast_number", \
+                    "specialists_sum_number", "specialists_number", "harsh_climate", 'geometry']
+        
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+        
+    elif 'graduates_forecast_sum_number' in cities.columns and 'specialists_sum_number' not in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", "graduates_forecast_sum_number", "graduates_forecast_number", \
+                    "harsh_climate", 'geometry']
+        
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+        
+    elif 'graduates_forecast_sum_number' not  in cities.columns and 'specialists_sum_number' in cities.columns:
+        column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
+                    "ueqi_street_networks", "ueqi_green_spaces", "ueqi_public_and_business_infrastructure",\
+                    "ueqi_social_and_leisure_infrastructure", "ueqi_citywide_space", "factories_total", "vacancy_count",\
+                    "max_salary", "min_salary", "median_salary", "probability_to_move", "num_in_migration", "num_out_migration",\
+                    "one_vacancy_out_response", "num_responses", \
+                    "specialists_sum_number", "specialists_number", "harsh_climate", "geometry"]
+
+        column_order += list(cities.columns.difference(column_order))
+        cities = cities.reindex(columns=column_order)
+
+    
         
     return  {"estimates": cities, "links": links_json}
 
@@ -246,6 +285,25 @@ def estimate_migration(cities: GeoDataFrame):
 Returns FeatureCollection that contains the number of job seekers' responses from city_source 
 to a job vacancies from city_destination 
 '''
+
+def _custom_line_string(city_source, city_destination, cities):
+    try:
+        # Try to access values from cities DataFrame
+        try:
+            source_geometry = cities.loc[city_source]["geometry"]
+            destination_geometry = cities.loc[city_destination]["geometry"]
+        except TypeError:
+            source_geometry = cities.loc[city_source]
+            destination_geometry = cities.loc[city_destination]
+
+        # Create LineString
+        result = LineString((source_geometry, destination_geometry))
+        return result
+    except KeyError:
+        # Handle KeyError by returning None
+        logger.warning(f'No geometry in cities table is provided for the link: {city_source} - {city_destination}')
+        return None
+
 def get_migration_links(responses: DataFrame, cities: GeoDataFrame):
 
     links = responses.groupby(["cluster_center_cv", "cluster_center_vacancy"])["year"].count()
@@ -253,9 +311,8 @@ def get_migration_links(responses: DataFrame, cities: GeoDataFrame):
     links = links.rename(columns={"cluster_center_cv": "city_source", "cluster_center_vacancy": "city_destination"})
     links = links[links["city_source"] != links["city_destination"]]
     links = links[links["num_responses"] >= links["num_responses"].quantile(0.95)]
-    links["geometry"] = links.apply(
-        lambda x: LineString((cities.loc[x.city_source]["geometry"], cities.loc[x.city_destination]["geometry"])), 
-        axis=1)
+    links["geometry"] = links.apply(lambda x: _custom_line_string(x.city_source, x.city_destination, cities), axis=1)
+    links.dropna(subset='geometry', inplace=True)
     links = gpd.GeoDataFrame(links).sort_values(by=["num_responses"], ascending=True)
 
     return links
@@ -286,9 +343,12 @@ def get_city_migration_links(responses: DataFrame, cities: GeoDataFrame, city_se
 
     responses_aggr = responses_loc.groupby(["cluster_center_cv", "cluster_center_vacancy"])
     responses_aggr = responses_aggr.count()["id_cv"].rename("responses").reset_index()
-    responses_aggr["geometry"] = responses_aggr.apply(lambda x: LineString(
-        (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
-        ), axis=1)
+    responses_aggr["geometry"] = responses_aggr.apply(lambda x: _custom_line_string(x.cluster_center_cv, x.cluster_center_vacancy, cities_geometry), axis=1)
+    responses_aggr.dropna(subset='geometry', inplace=True)
+
+    # responses_aggr["geometry"] = responses_aggr.apply(lambda x: LineString(
+    #     (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
+    #     ), axis=1)
     
     responses_aggr["direction"] = None
     responses_aggr.loc[responses_aggr["cluster_center_cv"] == city_selected, "direction"] = "out"
@@ -316,10 +376,16 @@ def get_city_agglomeration_links(agglomerations: DataFrame, cities: DataFrame, c
     aggl_loc = aggl_loc[aggl_loc["cluster_city"] != aggl_loc["cluster_center"]]
 
     city_coord = cities_geometry.loc[city_selected]
+    # print(type(city_coord))
+    # # print(aggl_loc.sort_values(by='coordinates'))
+    # aggl_loc['coordinates'].apply(lambda x: print(x))
+    # aggl_loc['coordinates'].apply(lambda x: print(type(x)))
+    # aggl_loc['coordinates'].apply(lambda x: print(type(Point(x))))
+    aggl_loc["coordinates"] =  aggl_loc["coordinates"].apply(loads)
     aggl_loc["geometry"] = aggl_loc["coordinates"].apply(lambda x: LineString((x, city_coord)))
 
-    aggl_links = gpd.GeoDataFrame(aggl_loc[["cluster_city", "cluster_center", "geometry"]])
-    aggl_nodes = gpd.GeoDataFrame(aggl_loc[["coordinates", "cluster_city"]].rename(columns={"coordinates": "geometry"}))
+    aggl_links = gpd.GeoDataFrame(aggl_loc[["cluster_city", "cluster_center", "geometry"]], geometry='geometry', crs=4326)
+    aggl_nodes = gpd.GeoDataFrame(aggl_loc[["coordinates", "cluster_city"]].rename(columns={"coordinates": "geometry"}), geometry='geometry', crs=4326)
 
     return {"links": aggl_links, "nodes": aggl_nodes}
 

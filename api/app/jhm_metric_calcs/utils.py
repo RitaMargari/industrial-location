@@ -7,6 +7,16 @@ import shapely
 import numpy as np
 import requests
 from app import constants
+from fastapi.exceptions import HTTPException
+
+
+def raise_empty_geometry_speciality(speciality: str):
+    """raises: HTTPException(400)"""
+    detail = f"Для специальности {speciality} не может быть сформирован слой, "\
+                                "попробуйте увеличить ЗП/изменить параметры запроса"
+    raise HTTPException(status_code=400,
+                        detail=detail)
+
 
 
 def get_nx2_nk_idmap(G_nx):
@@ -110,16 +120,17 @@ def G_to_gdf(G: nx.DiGraph):
     return graph_gdf2, G_nx2
 
 
-def convert_wgs_to_utm(lon: float, lat: float):
-    """Based on lat and lng, return best utm epsg-code"""
-    utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
-    if len(utm_band) == 1:
-        utm_band = "0" + utm_band
-    if lat >= 0:
-        epsg_code = "326" + utm_band
-        return epsg_code
-    epsg_code = "327" + utm_band
-    return epsg_code
+# def convert_wgs_to_utm(lon: float, lat: float):
+#     """Based on lat and lng, return best utm epsg-code"""
+#     utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
+#     print(utm_band)
+#     if len(utm_band) == 1:
+#         utm_band = "0" + utm_band
+#     if lat >= 0:
+#         epsg_code = "326" + utm_band
+#         return epsg_code
+#     epsg_code = "327" + utm_band
+#     return epsg_code
 
 
 def get_nearest_nodes(graph_gdf: gpd.GeoDataFrame, locations: gpd.GeoSeries):
