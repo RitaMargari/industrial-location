@@ -181,11 +181,15 @@ def send_plots():
 def get_jhm_metric(query_params: schemas.JhmQueryParams):
     # city_name = map_city_name(query_params.city_name.value)
 
-    validate_company_location(
-        query_params.company_location, query_params.city_name.value
-    )
+    validate_company_location(query_params.company_location, query_params.city_name.value)
     validate_workers_salary(query_params.worker_and_salary)
-    
+
+    path = f"app/provisions_data/{query_params.city_name.value}_prov/"
+    gdf_houses = gpd.read_parquet(path + "houses_price_demo_prov.parquet")
+    graph_type = {
+        "public_transport": nx.read_graphml(path + "G_intermodal.graphml"),
+        "private_car":  nx.read_graphml(path + "G_drive.graphml"),
+    }
 
     result = main(
         gdf_houses=data_provisions[query_params.city_name.value]["gdf_houses"],
