@@ -16,6 +16,23 @@ from shapely.wkt import loads
 from loguru import logger
 
 
+import pandas as pd
+import geopandas as gpd
+import numpy as np
+
+from tqdm import tqdm
+from sklearn.preprocessing import OneHotEncoder
+
+from sklearn.preprocessing import MinMaxScaler
+from shapely.geometry import LineString
+
+from app.recalc import recalc
+
+# from tensorboardX import SummaryWriter
+
+tqdm.pandas()
+
+
 '''Returns json containing the ontology of industries (full [industry_code = None] or for specified industry)'''
 def get_ontology_industry(ontology: DataFrame, industry_code: Optional[str] = None):
 
@@ -54,7 +71,7 @@ Returns:
         links_output (bool) - specifies if the migration links are the part of the output
 '''
 def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataFrame, cities: GeoDataFrame,
-                            responses: DataFrame, vacancy: DataFrame, 
+                            responses: DataFrame, vacancy: DataFrame, DM, model, migrations_all,
                             workforce_type: str = 'all', specialities: Optional[dict] = None, 
                             edu_groups: Optional[dict] = None, links_output:bool=False):
 
@@ -73,7 +90,7 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
     YEAR = 2021
 
     cv_loc = cv[cv["year"] == YEAR]
-    vacancy_loc = vacancy[vacancy["year"] == YEAR]
+    # vacancy_loc = vacancy[vacancy["year"] == YEAR]
     responses_loc = responses[responses["year"] == YEAR]
 
     all_specialities = ontology.set_index("speciality_id")["speciality"].drop_duplicates()
@@ -115,23 +132,24 @@ def get_potential_estimates(ontology: DataFrame, cv: DataFrame, graduates: DataF
         cities = estimate_cv(cv_loc, cities, specialities)
 
     # get estimates based on observed pseudo migration (responses stat)
-    cities = estimate_migration(cities)
+    cities, _ = recalc(cities=cities, DM=DM, cat=model, migrations_all=migrations_all)
 
     # if links_output is True, prepare the strongest (migration) connections between cities
     links_json = get_migration_links(responses_loc, cities) if links_output else None
+    cities.reset_index(drop=False, inplace=True)
 
     # scale estimates
-    scaler = MinMaxScaler()
-    cities["estimate"] = pd.Series(
-        scaler.fit_transform(np.expand_dims(cities["estimate"].to_numpy(), 1)).squeeze(),
-        index=cities.index
-        )
+    # scaler = MinMaxScaler()
+    # cities["estimate"] = pd.Series(
+    #     scaler.fit_transform(np.expand_dims(cities["estimate"].to_numpy(), 1)).squeeze(),
+    #     index=cities.index
+    #     )
         
-    cities = cities.sort_values(by="estimate", ascending=False)
-    cities["estimate"] = cities["estimate"].round(3)
-    cities = cities.reset_index()
+    # cities = cities.sort_values(by="estimate", ascending=False)
+    # cities["estimate"] = cities["estimate"].round(3)
+    # cities = cities.reset_index()
 
-    print(cities.columns)
+    # print(cities.columns)
 
     if 'graduates_forecast_sum_number' in cities.columns and 'specialists_sum_number' in cities.columns:
         column_order = ["region_city", "region", "city", "estimate", "city_category", "population", "ueqi_score", "ueqi_residential",\
@@ -404,8 +422,8 @@ Returns:
         city_name (str) - name of the selected city
 '''
 
-def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: DataFrame, model, shap_values,
-                      cities: GeoDataFrame, city_name: str, plot=False):
+def predict_migration(cities_compare: GeoDataFrame,
+                      cities: GeoDataFrame, city_name: str, responses, shap_values, DM, model, migrations_all, plot=False,):
 
     cities = cities.set_index("region_city")
     cities_compare = cities_compare.set_index("region_city")
@@ -429,116 +447,139 @@ def predict_migration(cities_compare: GeoDataFrame, responses: DataFrame, DM: Da
     # check if there is any changes in cities' stats
     if cities_compare[columns].loc[cities.index].equals(cities[columns]):
         # if there is no changes, return initial table 
-        city_update, migration, svg_plot = get_response_no_changes(cities, cities_compare, city_name, responses, shap_values, plot)
+        # pass
+        cities_update = get_response_no_changes(cities, city_name)
     else:
         # if there are some changes, recalculate num_in_migration and estimate for the selected city 
-        city_update, migration, svg_plot = recalculate(cities, columns, city_name, DM, model, shap_values, plot)
+        cities_update, target_vector = recalculate(city_name=city_name, cities=cities, DM=DM, migrations_all=migrations_all, model=model)
 
-    return {'city_features': city_update, 'new_links': migration, 'plot': svg_plot}
+    migration = get_city_migration_links(responses, cities_update.reset_index(), city_name)
+    migration = migration[migration['direction'] == 'in']
+
+    if plot: 
+        updated_shap_values = explain(target_vector, shap_values, model)
+        svg_plot = plot_local_waterfall(updated_shap_values)
+    else:
+        svg_plot = None
+
+    # city_update = cities_update.loc[[city_name]]
+
+    return {'city_features': cities_update, 'new_links': migration, 'plot': svg_plot}
 
 
 '''
 Returns GeoDataFrame with recalculated estimate, GeoDataFrame with recalculated migration links and dict with changes
 '''
-def recalculate(cities, columns, city_name, DM, model, shap_values, plot): 
+# def recalculate_old(cities, columns, city_name, DM, model, shap_values, plot): 
 
-    # prepare features for the model
-    cities_features = decode_features(cities, columns)
+#     # prepare features for the model
+#     cities_features = decode_features(cities, columns)
 
-    # create df for predictions
-    cities_index = cities_features.index
-    responses_predict = pd.DataFrame({
-        'cluster_center_cv': [i for i in cities_index], 
-        'cluster_center_vacancy': [city_name for i in range(len(cities_index))],
-        'distance': None})
+#     # create df for predictions
+#     cities_index = cities_features.index
+#     responses_predict = pd.DataFrame({
+#         'cluster_center_cv': [i for i in cities_index], 
+#         'cluster_center_vacancy': [city_name for i in range(len(cities_index))],
+#         'distance': None})
 
-    # add distance from distance matrix
-    responses_predict = responses_predict.set_index('cluster_center_cv')
-    responses_predict['distance'] = DM.loc[city_name]
-    responses_predict = responses_predict.reset_index()
+#     # add distance from distance matrix
+#     responses_predict = responses_predict.set_index('cluster_center_cv')
+#     responses_predict['distance'] = DM.loc[city_name]
+#     responses_predict = responses_predict.reset_index()
 
-    # form an input vecor x
-    responses_predict['x'] = list(np.concatenate((
-        cities_features.loc[list(responses_predict['cluster_center_cv'])].drop(['vacancy_count'], axis=1).to_numpy(), 
-        cities_features.loc[list(responses_predict['cluster_center_vacancy'])].drop(['cvs_count_all'], axis=1).to_numpy(), 
-        responses_predict['distance'].astype('float').round(3).to_numpy().reshape(len(responses_predict), 1)
-        ), axis=1))
+#     # form an input vecor x
+#     responses_predict['x'] = list(np.concatenate((
+#         cities_features.loc[list(responses_predict['cluster_center_cv'])].drop(['vacancy_count'], axis=1).to_numpy(), 
+#         cities_features.loc[list(responses_predict['cluster_center_vacancy'])].drop(['cvs_count_all'], axis=1).to_numpy(), 
+#         responses_predict['distance'].astype('float').round(3).to_numpy().reshape(len(responses_predict), 1)
+#         ), axis=1))
 
-    # predict migration and process the response
-    responses_predict['responses'] = model.predict(Pool(data=responses_predict['x']))
-    responses_predict.loc[responses_predict['responses'] < 0, 'responses'] = 0
-    responses_predict['responses'] = responses_predict['responses'].apply(lambda x: 0 if x < 0.6 else x)
-    responses_predict['responses'] = responses_predict['responses'].round()
+#     # predict migration and process the response
+#     responses_predict['responses'] = model.predict(Pool(data=responses_predict['x']))
+#     responses_predict.loc[responses_predict['responses'] < 0, 'responses'] = 0
+#     responses_predict['responses'] = responses_predict['responses'].apply(lambda x: 0 if x < 0.6 else x)
+#     responses_predict['responses'] = responses_predict['responses'].round()
 
-    # create new migration links
-    migration = responses_predict[responses_predict["cluster_center_cv"] != responses_predict["cluster_center_vacancy"]]
-    migration = gpd.GeoDataFrame(migration)
+#     # create new migration links
+#     migration = responses_predict[responses_predict["cluster_center_cv"] != responses_predict["cluster_center_vacancy"]]
+#     migration = gpd.GeoDataFrame(migration)
 
-    # recalculate num_in_migration
-    num_vacancy = cities["vacancy_count"] # the total number of relevant vacancies in a city
-    num_in_migration = migration[migration["cluster_center_vacancy"] == city_name].set_index("cluster_center_cv")["responses"].sum() 
+#     # recalculate num_in_migration
+#     num_vacancy = cities["vacancy_count"] # the total number of relevant vacancies in a city
+#     num_in_migration = migration[migration["cluster_center_vacancy"] == city_name].set_index("cluster_center_cv")["responses"].sum() 
 
-    # num_responses = cities["num_responses"] # the total number of responses on vacancies in a city
-    # num_out_migration = migration[migration["cluster_center_cv"] == city_name]["responses"].sum()
+#     num_responses = responses_predict["responses"] # the total number of responses on vacancies in a city
+#     num_out_migration = migration[migration["cluster_center_cv"] == city_name]["responses"].sum()
 
-    cities_update = cities.copy()
-    cities_update.loc[city_name, 'num_in_migration'] = num_in_migration
-    cities_update.loc[city_name, 'one_vacancy_out_response'] = (num_in_migration / num_vacancy.loc[city_name]).round(3)
-    # cities.loc[city_name, 'probability_to_move'] = num_out_migration / num_responses
+#     cities_update = cities.copy()
+#     cities_update.loc[city_name, 'num_in_migration'] = num_in_migration
+#     cities_update.loc[city_name, 'one_vacancy_out_response'] = (num_in_migration / num_vacancy.loc[city_name]).round(3)
+#     print(num_out_migration, num_in_migration)
+#     # print(cities.loc[city_name, :])
+#     # print(num_out_migration)
+#     # print(num_responses)
+#     cities_update.loc[city_name, 'probability_to_move'] = num_out_migration / num_responses.sum().item()
 
-    cities_geometry = cities["geometry"]
-    migration["geometry"] = migration.apply(lambda x: LineString(
-        (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
-        ), axis=1)
+#     cities_geometry = cities["geometry"]
+#     migration["geometry"] = migration.apply(lambda x: LineString(
+#         (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
+#         ), axis=1)
     
-    migration = migration.drop(['distance'], axis=1)
-    migration = migration[migration['responses'] != 0]
-    migration['direction'] = 'in'
+#     migration = migration.drop(['distance'], axis=1)
+#     migration = migration[migration['responses'] != 0]
+#     migration['direction'] = 'in'
     
-    # rescale estimates
-    scaler = MinMaxScaler()
-    column_norm = ["probability_to_move", "one_vacancy_out_response"]
-    for column in ["cv_count_weighted_sum", "graduates_weighted_sum"]: 
-        if column in cities_update.columns: column_norm.append(column)
+#     # rescale estimates
+#     scaler = MinMaxScaler()
+#     column_norm = ["probability_to_move", "one_vacancy_out_response"]
+#     for column in ["cv_count_weighted_sum", "graduates_weighted_sum"]: 
+#         if column in cities_update.columns: column_norm.append(column)
 
-    migration_estinate = pd.DataFrame(
-        scaler.fit_transform(np.log(cities_update[column_norm].abs().to_numpy() + 10e-06)),
-        index=cities_update.index, columns=column_norm
-    )
+#     migration_estinate = pd.DataFrame(
+#         scaler.fit_transform(np.log(cities_update[column_norm].abs().to_numpy() + 10e-06)),
+#         index=cities_update.index, columns=column_norm
+#     )
 
-    migration_estinate['probability_to_move'] *= -1 # negative influence on estimate
+#     migration_estinate['probability_to_move'] *= -1 # negative influence on estimate
 
-    cities_update["estimate"] = 0
+#     cities_update["estimate"] = 0
 
-    for column in column_norm:
-        cities_update["estimate"] += migration_estinate[column]
+#     for column in column_norm:
+#         cities_update["estimate"] += migration_estinate[column]
         
-    scaler = MinMaxScaler()
-    cities_update["estimate"] = pd.Series(
-        scaler.fit_transform(np.expand_dims(cities_update["estimate"].to_numpy(), 1)).squeeze(),
-        index=cities_update.index
-        ).fillna(0).round(3)
+#     scaler = MinMaxScaler()
+#     cities_update["estimate"] = pd.Series(
+#         scaler.fit_transform(np.expand_dims(cities_update["estimate"].to_numpy(), 1)).squeeze(),
+#         index=cities_update.index
+#         ).fillna(0).round(3)
     
-    city_update = cities_update.loc[[city_name]]
-    city_update = city_update.rename(
-        columns={'estimate': 'estimate_after', 'num_in_migration': 'num_in_migration_after'}
-        )
-    city_update['estimate_before'] = [cities['estimate'][city_name]]
-    city_update['num_in_migration_before'] = [cities['num_in_migration'][city_name]]
+#     city_update = cities_update.loc[[city_name]]
+#     city_update = city_update.rename(
+#         columns={'estimate': 'estimate_after', 'num_in_migration': 'num_in_migration_after'}
+#         )
+#     # city_update['estimate_before'] = [cities['estimate'][city_name]]
+#     # city_update['num_in_migration_before'] = [cities['num_in_migration'][city_name]]
 
-    if plot: 
-        updated_shap_values = explain(responses_predict['x'], shap_values, model)
-        svg_plot = plot_local_waterfall(updated_shap_values)
-    else:
-        svg_plot = None
+#     if plot: 
+#         updated_shap_values = explain(responses_predict['x'], shap_values, model)
+#         svg_plot = plot_local_waterfall(updated_shap_values)
+#     else:
+#         svg_plot = None
+#     print(city_update)
+#     return city_update, migration.drop(['x'], axis=1), svg_plot
+
+
+def recalculate(cities, DM, model, migrations_all, city_name=None):
+    target_vector=None
+    cities_update, target_vector = recalc(cities=cities, DM=DM, cat=model, migrations_all=migrations_all, city_name=city_name)
+
+    return cities_update, target_vector
     
-    return city_update, migration.drop(['x'], axis=1), svg_plot
-
 
 '''
 Returns GeoDataFrame with initial estimate, GeoDataFrame with calculated migration links and dict with no changes
 '''
-def get_response_no_changes(cities, cities_compare, city_name, responses, shap_values, plot):
+def get_response_no_changes(cities, city_name):
 
     city_update = cities.loc[[city_name]]
     city_update = city_update.rename(
@@ -546,17 +587,8 @@ def get_response_no_changes(cities, cities_compare, city_name, responses, shap_v
         )
     city_update['estimate_before'] = city_update['estimate_after']
     city_update['num_in_migration_before'] = city_update['num_in_migration_after']
-
-    migration = get_city_migration_links(responses, cities_compare.reset_index(), city_name)
-    migration = migration[migration['direction'] == 'in']
-
-    if plot:
-        shap_values_slice = shap_values[shap_values.cities_destination == city_name]
-        svg_plot = plot_local_waterfall(shap_values_slice)
-    else:
-        svg_plot = None
     
-    return city_update, migration, svg_plot
+    return city_update
 
 
 '''
@@ -576,9 +608,17 @@ def decode_features(df, columns):
 
 def explain(new_features, shap_values, model):
 
+    # print(new_features.numpy())
+    cols = shap_values.features_name[::-1]
+    idx_to_drop = np.argwhere(cols=='Количество открытых резюме (город соискателя)')
+    idx_to_drop2 = np.argwhere(cols=='Количество открытых вакансий (город вакансии)')
+    cols = np.delete(cols, idx_to_drop)
+    cols = np.delete(cols, idx_to_drop2)
+
+
     new_features = pd.DataFrame(
-        list(new_features.to_numpy()), 
-        columns= shap_values.features_name
+        list(new_features.numpy()), 
+        columns= cols
         )
     
     explainer = shap.TreeExplainer(model)
@@ -588,7 +628,7 @@ def explain(new_features, shap_values, model):
 
 def plot_local_waterfall(shap_values):
 
-    shap.plots.waterfall(shap_values[:, 14:24].mean(0))
+    shap.plots.waterfall(shap_values[:, :10].mean(0))
     svg_buffer = io.StringIO()
     plt.savefig(svg_buffer, format='svg', bbox_inches='tight')
     svg_buffer.seek(0) 
