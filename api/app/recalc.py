@@ -150,7 +150,7 @@ def recalc(cities, DM, cat, migrations_all, city_name=None):
             # )
             res = cat.predict(X.numpy())
             if name == city_name:
-                print(res.sum())
+                # print(res.sum())
                 target_vector = X
             migrations_all[name] = res
 
@@ -170,20 +170,24 @@ def recalc(cities, DM, cat, migrations_all, city_name=None):
 
     
     if city_name:
-        print('\n\n\n',migrations_all.loc[:, city_name].sum())
-        print(migrations_all.loc[city_name,:].sum(), '\n\n\n')
+        print('\n', city_name, '\n')
+        # print(migrations_all.loc[city_name,:].sum(), '\n\n\n')
         migrations_to_selected_city = migrations_all.loc[:, city_name]
-        cities.loc[:, "migrations_to_selected_city"] = migrations_to_selected_city
-        cities.loc[cities["migrations_to_selected_city"] < 0, "migrations_to_selected_city"] = 0
-        # migrations_from_selected_city = migrations_all.loc[city_name, :]
+        migrations_from_selected_city = migrations_all.loc[city_name, :]
 
-    responses_predict = pd.DataFrame(
-        {
-            "cluster_center_cv": [i for i in cities.index],
-            "cluster_center_vacancy": city_name,
-        }
-    )
-    responses_predict["responses"] = migrations_to_each_city.values
+        cities.loc[:, "out"] = migrations_from_selected_city.values
+
+        cities.loc[:, "in"] = migrations_to_selected_city
+        cities.loc[cities["in"] < 0, "in"] = 0
+
+
+    # responses_predict = pd.DataFrame(
+    #     {
+    #         "cluster_center_cv": [i for i in cities.index],
+    #         "cluster_center_vacancy": city_name,
+    #     }
+    # )
+    # responses_predict["responses"] = migrations_to_each_city.values
 
     cities.loc[:, "migrations_to_each_city"] = migrations_to_each_city.values
 

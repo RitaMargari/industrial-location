@@ -343,36 +343,46 @@ Parameters:
         city_selected (str) - name of the selected city
 
 '''
-def get_city_migration_links(responses: DataFrame, cities: GeoDataFrame, city_selected: str):
-        
-    if city_selected not in list(cities["region_city"]):
-        raise ValueError(f"The city {city_selected} is not supported")
-
-    YEAR = 2021
-    cities = cities.set_index("region_city")
-    cities_geometry = cities["geometry"]
-
-    responses_loc = responses[responses['year'] == YEAR]
-    responses_loc = responses_loc[responses_loc["cluster_center_cv"] != responses_loc["cluster_center_vacancy"]]
-    responses_loc = responses_loc[
-        (responses_loc["cluster_center_cv"] == city_selected) | 
-        (responses_loc["cluster_center_vacancy"]== city_selected)
-        ]
-
-    responses_aggr = responses_loc.groupby(["cluster_center_cv", "cluster_center_vacancy"])
-    responses_aggr = responses_aggr.count()["id_cv"].rename("responses").reset_index()
-    responses_aggr["geometry"] = responses_aggr.apply(lambda x: _custom_line_string(x.cluster_center_cv, x.cluster_center_vacancy, cities_geometry), axis=1)
-    responses_aggr.dropna(subset='geometry', inplace=True)
-
-    # responses_aggr["geometry"] = responses_aggr.apply(lambda x: LineString(
-    #     (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
-    #     ), axis=1)
+def get_city_migration_links(responses: DataFrame, cities: GeoDataFrame, city_selected: str, updated=False):
     
-    responses_aggr["direction"] = None
-    responses_aggr.loc[responses_aggr["cluster_center_cv"] == city_selected, "direction"] = "out"
-    responses_aggr.loc[responses_aggr["cluster_center_vacancy"] == city_selected, "direction"] = "in"
+    if not updated:
 
-    responses_aggr = gpd.GeoDataFrame(responses_aggr)
+        if city_selected not in list(cities["region_city"]):
+            raise ValueError(f"The city {city_selected} is not supported")
+
+        YEAR = 2021
+        cities = cities.set_index("region_city")
+        cities_geometry = cities["geometry"]
+
+        responses_loc = responses[responses['year'] == YEAR]
+        responses_loc = responses_loc[responses_loc["cluster_center_cv"] != responses_loc["cluster_center_vacancy"]]
+        responses_loc = responses_loc[
+            (responses_loc["cluster_center_cv"] == city_selected) | 
+            (responses_loc["cluster_center_vacancy"]== city_selected)
+            ]
+
+        responses_aggr = responses_loc.groupby(["cluster_center_cv", "cluster_center_vacancy"])
+        responses_aggr = responses_aggr.count()["id_cv"].rename("responses").reset_index()
+        responses_aggr["geometry"] = responses_aggr.apply(lambda x: _custom_line_string(x.cluster_center_cv, x.cluster_center_vacancy, cities_geometry), axis=1)
+        responses_aggr.dropna(subset='geometry', inplace=True)
+
+        # responses_aggr["geometry"] = responses_aggr.apply(lambda x: LineString(
+        #     (cities_geometry.loc[x.cluster_center_cv], cities_geometry.loc[x.cluster_center_vacancy])
+        #     ), axis=1)
+        
+        responses_aggr["direction"] = None
+        responses_aggr.loc[responses_aggr["cluster_center_cv"] == city_selected, "direction"] = "out"
+        responses_aggr.loc[responses_aggr["cluster_center_vacancy"] == city_selected, "direction"] = "in"
+
+        responses_aggr = gpd.GeoDataFrame(responses_aggr)
+    
+    else:
+        responses_aggr = cities.copy()
+        responses_aggr["direction"] = None
+
+        # responses_aggr["geometry"] = responses_aggr.apply(lambda x: _custom_line_string('cities', "city_selected", x['geometry']), axis=1)
+
+    
     return responses_aggr
 
 
@@ -453,8 +463,10 @@ def predict_migration(cities_compare: GeoDataFrame,
         # if there are some changes, recalculate num_in_migration and estimate for the selected city 
         cities_update, target_vector = recalculate(city_name=city_name, cities=cities, DM=DM, migrations_all=migrations_all, model=model)
 
-    migration = get_city_migration_links(responses, cities_update.reset_index(), city_name)
-    migration = migration[migration['direction'] == 'in']
+    print('migrations_to_selected_city' in cities_update.columns)
+
+    migration = get_city_migration_links(responses, cities_update.reset_index(), city_name, True)
+    # migration = migration[migration['direction'] == 'in']
 
     if plot: 
         updated_shap_values = explain(target_vector, shap_values, model)

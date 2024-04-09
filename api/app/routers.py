@@ -182,6 +182,7 @@ def predict_migration(query_params: schemas.PredictionIn):
         "city_features": json.loads(result["city_features"].to_json()),
         "new_links": json.loads(result["new_links"].to_json()),
         "plot": result["plot"],
+        # "cities": json.loads(result['cities'].to_json())
     }
 
 
