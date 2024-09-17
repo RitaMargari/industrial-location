@@ -21,8 +21,6 @@ def pd_fill_diagonal(df_matrix, value=0):
     mat[range(n), range(n)] = value
     return pd.DataFrame(mat)
 
-
-
 def split_train_test_new21(x, edge_index, edge_weight, mask):
 
     edge_index, edge_weight = edge_index, edge_weight[mask].unsqueeze(-1)
