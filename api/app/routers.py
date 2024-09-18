@@ -8,10 +8,7 @@ import app.func as func
 
 
 from app.jhm_metric_calcs.jhm_metric import main
-from app.routers_utils import (
-    validate_company_location,
-    validate_workers_salary
-)
+from app.routers_utils import validate_company_location, validate_workers_salary
 
 from app.data_reader import (
     ontology,
@@ -23,16 +20,15 @@ from app.data_reader import (
     agglomerations,
     DM,
     model,
-    data_provisions,
+    # data_provisions,
+    migrations_all
 )
 from fastapi.responses import JSONResponse
 
-from fastapi import APIRouter,  Depends
-from catboost import CatBoostRegressor
+from fastapi import APIRouter, Depends
 
 from enum import auto
 from app import enums, schemas
-from shapely import wkt
 
 
 router = APIRouter()
@@ -50,16 +46,18 @@ faulthandler.enable()
 # agglomerations = pd.read_parquet("app/data/agglomerations.gzip")
 # download_intermodal_g_spb()
 
-with open('app/shap_plots/explanation.joblib', 'rb') as f:
+with open("app/shap_plots/explanation.joblib", "rb") as f:
     shap_values = jbl.load(f)
-    
 
-cities = cities.rename(columns={
-        'vacancies_count_all': 'vacancy_count', 
-        'max_salary_all': 'max_salary',
-        'median_salary_all': 'median_salary',
-        'min_salary_all': 'min_salary'
-        })
+
+# cities = cities.rename(
+#     columns={
+#         "vacancies_count_all": "vacancy_count",
+#         "max_salary_all": "max_salary",
+#         "median_salary_all": "median_salary",
+#         "min_salary_all": "min_salary",
+#     }
+# )
 
 
 class Tags(str, enums.AutoName):
@@ -110,15 +108,26 @@ def get_ontology_edu_groups(query_params: schemas.OntologyQueryParams = Depends(
 )
 def get_potential_estimates(query_params: schemas.EstimatesIn):
     result = func.get_potential_estimates(
-        ontology=ontology, cv=cv, graduates=graduates, cities=cities, responses=responses, vacancy=vacancy,
-        workforce_type = query_params.workforce_type, specialities=query_params.specialities, 
-        edu_groups=query_params.edu_groups, links_output=query_params.links_output
-        )
-
+        ontology=ontology,
+        cv=cv,
+        graduates=graduates,
+        cities=cities,
+        responses=responses,
+        vacancy=vacancy,
+        workforce_type=query_params.workforce_type,
+        specialities=query_params.specialities,
+        edu_groups=query_params.edu_groups,
+        links_output=query_params.links_output,
+        DM=DM,
+        migrations_all=migrations_all,
+        model=model
+    )
+    # result["estimates"].to_parquet('result_estimates.parquet')
     return {
-        'estimates': json.loads(result['estimates'].to_json()),
-        'links': json.loads(result['links'].to_json()) if not None else links_json
-        }
+        "estimates": json.loads(result["estimates"].to_json()),
+        "links": json.loads(result["links"].to_json()) if not None else links_json,
+    }
+
 
 @router.post(
     "/calculation/connection",
@@ -127,7 +136,9 @@ def get_potential_estimates(query_params: schemas.EstimatesIn):
 )
 def get_connections(query_params: schemas.ConnectionsIn):
     migration = func.get_city_migration_links(responses, cities, query_params.city)
-    agglomeration = func.get_city_agglomeration_links(agglomerations, cities, query_params.city)
+    agglomeration = func.get_city_agglomeration_links(
+        agglomerations, cities, query_params.city
+    )
 
     # print(agglomeration["nodes"])
     # print(agglomeration["nodes"].columns)
@@ -136,44 +147,59 @@ def get_connections(query_params: schemas.ConnectionsIn):
     # print(agglomeration["links"].columns)
     # print(type(agglomeration["links"]))
     return {
-        "migration_link": json.loads(migration.to_json()), 
-        "agglomeration_links": json.loads(agglomeration["links"].to_json()), 
-        "agglomeration_nodes": json.loads(agglomeration["nodes"].to_json())
-        }
+        "migration_link": json.loads(migration.to_json()),
+        "agglomeration_links": json.loads(agglomeration["links"].to_json()),
+        "agglomeration_nodes": json.loads(agglomeration["nodes"].to_json()),
+    }
 
 
 @router.post(
-    '/calculation/prediction',
-    response_model=schemas.PredictionOut, tags=[Tags.prediction]
+    "/calculation/prediction",
+    response_model=schemas.PredictionOut,
+    tags=[Tags.prediction],
 )
 def predict_migration(query_params: schemas.PredictionIn):
 
     estimates_table = query_params.estimates_table.dict()
-    estimates_table = gpd.GeoDataFrame.from_features(estimates_table['features'])
+    estimates_table = gpd.GeoDataFrame.from_features(estimates_table["features"])
     result = func.predict_migration(
-        cities, responses, DM, model, shap_values, estimates_table, query_params.city_name, query_params.plot
-        )
+        cities_compare=cities,
+        responses=responses,
+        DM=DM,
+        model=model,
+        migrations_all=migrations_all,
+        shap_values=shap_values,
+        cities=estimates_table,
+        city_name=query_params.city_name,
+        plot=query_params.plot
+
+    )
+
+    result["city_features"] = result["city_features"].loc[[query_params.city_name]]
+
 
     return {
-        "city_features": json.loads(result['city_features'].to_json()), 
+        "city_features": json.loads(result["city_features"].to_json()),
         "new_links": json.loads(result["new_links"].to_json()),
-        "plot": result["plot"]}
+        "plot": result["plot"],
+        # "cities": json.loads(result['cities'].to_json())
+    }
 
 
-@router.get('/calculation/plots', tags=[Tags.plots])
+@router.get("/calculation/plots", tags=[Tags.plots])
 def send_plots():
     svg_files = [
-        'app/shap_plots/plots/largest.svg',
-        'app/shap_plots/plots/large.svg',
-        'app/shap_plots/plots/big.svg',
-        'app/shap_plots/plots/average.svg',
-        'app/shap_plots/plots/small.svg'
-                 ]
-    
+        "app/shap_plots/plots/largest.svg",
+        "app/shap_plots/plots/large.svg",
+        "app/shap_plots/plots/big.svg",
+        "app/shap_plots/plots/average.svg",
+        "app/shap_plots/plots/small.svg",
+    ]
+
     svgs = {}
     for file in svg_files:
-        with open(file, 'r') as f:
-            svgs[file.split('/')[-1].split('.')[0]] = f.read()
+        with open(file, "r") as f:
+            svgs[file.split("/")[-1].split(".")[0]] = f.read()
     return JSONResponse(svgs)
 
 
@@ -185,12 +211,13 @@ def get_jhm_metric(query_params: schemas.JhmQueryParams):
         query_params.company_location, query_params.city_name.value
     )
     validate_workers_salary(query_params.worker_and_salary)
-    
 
     result = main(
         gdf_houses=data_provisions[query_params.city_name.value]["gdf_houses"],
         worker_and_salary=query_params.worker_and_salary,
-        graph=data_provisions[query_params.city_name.value][query_params.transportation_type],
+        graph=data_provisions[query_params.city_name.value][
+            query_params.transportation_type
+        ],
         company_location=query_params.company_location,
         cell_size_meters=query_params.cell_size_meters,
     )

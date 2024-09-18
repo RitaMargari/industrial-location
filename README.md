@@ -1,5 +1,7 @@
 # industrial-location
 
+The following code starts up a Docker container with API:
+
 ### About
 
 1: Сервис оценки потенциала городов для развития промышленной отрасли с точки зрения обеспеченности трудовыми ресурсами
@@ -11,8 +13,8 @@
 Сервисы предоставляются через docker container с API:
 
 ```shell
-docker pull oneonwar/industrial_location:3.2
-docker container run oneonwar/industrial_location:3.2
+docker pull gkontsevik/industrial_location:3.10
+docker container run gkontsevik/industrial_location:3.10
 ```
 
 ### Example
@@ -21,6 +23,7 @@ docker container run oneonwar/industrial_location:3.2
 функционал API
 
 ### Cite
+
 ```shell
 @software{industrial-location,
   author = {Mishina M., Kharlov L., Kontsevik G.},

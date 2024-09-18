@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  il:
+    build: ./
+    image: gkontsevik/industrial-location:3.7
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/app/
+    platform: linux/arm64
+    ports:
+      - "8000:8000"

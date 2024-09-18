@@ -1,16 +1,40 @@
-FROM tiangolo/uvicorn-gunicorn-fastapi:python3.9
+# pull official base image
+FROM python:3.9
 
-RUN apt-get update && apt-get -qq -y install curl \
-    && apt-get update && apt-get -y install libspatialindex-dev \
-    && apt-get clean
+# set work directory
+WORKDIR /usr/app
 
-WORKDIR /app
+# RUN echo "Acquire::http::Pipeline-Depth 0;" > /etc/apt/apt.conf.d/99custom && \
+#     echo "Acquire::http::No-Cache true;" >> /etc/apt/apt.conf.d/99custom && \
+#     echo "Acquire::BrokenProxy    true;" >> /etc/apt/apt.conf.d/99custom
 
-COPY ./requirements.txt /app/requirements.txt
+# copy requirements file
+COPY ./requirements.txt /usr/app/requirements.txt
 
-RUN python -m pip install --upgrade pip \
-    && pip install --no-cache-dir --upgrade -r /app/requirements.txt
+# install dependencies
+RUN set -eux \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libspatialindex-dev \
+        libgdal-dev \
+        build-essential \
+        libssl-dev \
+        libffi-dev \
+        gcc \
+        libc6-dev \
+        python3-dev \
+        cmake \
+    # && pip cache purge \
+    && pip install --no-cache-dir Cython \
+    && pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r /usr/app/requirements.txt \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /root/.cache/pip
 
-COPY . /app
+# copy project
+COPY . /usr/app/
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port 5000
+VOLUME /usr/app
+
+
+CMD  ["uvicorn", "app.main:app", "--reload", "--workers", "-1", "--host", "0.0.0.0", "--port", "8000"]
