@@ -161,7 +161,9 @@ def recalc(cities, DM, cat, migrations_all, city_name=None):
     else:
         migrations_all = migrations_all
 
-    
+    '''
+    Поправить изменить migrations_to_selected_city на migrations_to_each_city из которого берется город
+    '''
 
     migrations_to_each_city = migrations_all.sum(axis=0)
     migrations_from_each_city = migrations_all.sum(axis=1)
