@@ -1,7 +1,5 @@
 # industrial-location
 
-The following code starts up a Docker container with API:
-
 ### About
 
 1: Сервис оценки потенциала городов для развития промышленной отрасли с точки зрения обеспеченности трудовыми ресурсами
